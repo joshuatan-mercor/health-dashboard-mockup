@@ -436,6 +436,9 @@ const appColumns = [
 
 function getFilteredApps() {
   let data = [...apps];
+  if (appStatusFilter) {
+    data = data.filter(a => a.status === appStatusFilter);
+  }
   if (searchQuery) {
     data = data.filter(a => {
       const hay = [a.name, a.type, a.domain, a.owner, a.status, a.repo, a.lastRun].join(' ').toLowerCase();
@@ -464,12 +467,20 @@ function renderAppHealthTab() {
   const red = active.filter(a => a.status === 'red').length;
   const dep = data.filter(a => a.status === 'deprecated').length;
 
+  // Summary always shows unfiltered counts
+  const allApps = apps;
+  const allActive = allApps.filter(a => a.status !== 'deprecated');
+  const allGreen = allActive.filter(a => a.status === 'green').length;
+  const allYellow = allActive.filter(a => a.status === 'yellow').length;
+  const allRed = allActive.filter(a => a.status === 'red').length;
+  const allDep = allApps.filter(a => a.status === 'deprecated').length;
+
   document.getElementById('appSummaryBar').innerHTML = [
-    summaryCard('Total Apps', data.length, '#6366f1', 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z'),
-    summaryCard('Healthy', green, '#10b981', 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'),
-    summaryCard('Warning', yellow, '#f59e0b', 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z'),
-    summaryCard('Critical', red, '#ef4444', 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z'),
-    summaryCard('Deprecated', dep, '#64748b', 'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636'),
+    summaryCard('Total Apps', allApps.length, '#6366f1', 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', 'total'),
+    summaryCard('Healthy', allGreen, '#10b981', 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', 'green'),
+    summaryCard('Warning', allYellow, '#f59e0b', 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z', 'yellow'),
+    summaryCard('Critical', allRed, '#ef4444', 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z', 'red'),
+    summaryCard('Deprecated', allDep, '#64748b', 'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636', 'deprecated'),
   ].join('');
 
   // Thead
@@ -510,17 +521,60 @@ function sortAppCol(col) {
   renderAppHealthTab();
 }
 
-function summaryCard(label, value, color, iconPath) {
+// Simulated 7d-ago counts for summary cards
+const weekAgoDeltas = { total: 2, green: 3, yellow: -1, red: -1, deprecated: 0 };
+let appStatusFilter = null; // null = show all, or 'green'/'yellow'/'red'/'deprecated'
+
+function summaryCard(label, value, color, iconPath, deltaKey) {
+  const d = weekAgoDeltas[deltaKey] || 0;
+  const sign = d >= 0 ? '+' : '';
+  const dColor = d > 0 ? 'text-emerald-400' : d < 0 ? 'text-red-400' : 'text-slate-500';
+  const filterVal = deltaKey === 'total' ? null : deltaKey === 'green' ? 'green' : deltaKey === 'yellow' ? 'yellow' : deltaKey === 'red' ? 'red' : 'deprecated';
+  const activeRing = appStatusFilter === filterVal ? 'ring-2 ring-accent' : '';
   return `
-    <div class="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+    <div class="bg-card border border-border rounded-xl p-4 flex items-center gap-3 cursor-pointer hover:border-accent/50 transition-all ${activeRing}" onclick="filterByStatus(${filterVal === null ? 'null' : `'${filterVal}'`})">
       <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:${color}20">
         <svg class="w-5 h-5" style="color:${color}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${iconPath}"/></svg>
       </div>
       <div>
         <div class="text-2xl font-bold text-white">${value}</div>
         <div class="text-xs text-slate-500">${label}</div>
+        <div class="text-[10px] ${dColor} font-medium mt-0.5">${sign}${d} vs 7d ago</div>
       </div>
     </div>`;
+}
+
+function filterByStatus(status) {
+  appStatusFilter = appStatusFilter === status ? null : status;
+  renderAppHealthTab();
+}
+
+// Platform summary cards with deltas and click-to-filter
+let platStatusFilter = null;
+const platWeekAgoDeltas = { total: 1, green: 1, yellow: 0, red: -1 };
+
+function platformSummaryCard(label, value, color, iconPath, deltaKey) {
+  const d = platWeekAgoDeltas[deltaKey] || 0;
+  const sign = d >= 0 ? '+' : '';
+  const dColor = d > 0 ? 'text-emerald-400' : d < 0 ? 'text-red-400' : 'text-slate-500';
+  const filterVal = deltaKey === 'total' ? null : deltaKey;
+  const activeRing = platStatusFilter === filterVal ? 'ring-2 ring-accent' : '';
+  return `
+    <div class="bg-card border border-border rounded-xl p-4 flex items-center gap-3 cursor-pointer hover:border-accent/50 transition-all ${activeRing}" onclick="filterPlatByStatus(${filterVal === null ? 'null' : `'${filterVal}'`})">
+      <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:${color}20">
+        <svg class="w-5 h-5" style="color:${color}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${iconPath}"/></svg>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-white">${value}</div>
+        <div class="text-xs text-slate-500">${label}</div>
+        <div class="text-[10px] ${dColor} font-medium mt-0.5">${sign}${d} vs 7d ago</div>
+      </div>
+    </div>`;
+}
+
+function filterPlatByStatus(status) {
+  platStatusFilter = platStatusFilter === status ? null : status;
+  renderPlatformHealthTab();
 }
 
 // ─── APP DETAIL MODAL ────────────────────────────────────────────────
@@ -916,6 +970,9 @@ const platformColumns = [
 
 function getFilteredPlatforms() {
   let data = [...platforms[currentPlatformSubtab]];
+  if (platStatusFilter) {
+    data = data.filter(p => p.status === platStatusFilter);
+  }
   if (searchQuery) {
     data = data.filter(p => {
       const hay = [p.name, p.status, p.apps.join(' ')].join(' ').toLowerCase();
@@ -945,11 +1002,17 @@ function renderPlatformTab() {
   const yellow = data.filter(p => p.status === 'yellow').length;
   const red = data.filter(p => p.status === 'red').length;
 
+  // Summary always shows unfiltered counts for current subtab
+  const allPlats = platforms[currentPlatformSubtab];
+  const allPGreen = allPlats.filter(p => p.status === 'green').length;
+  const allPYellow = allPlats.filter(p => p.status === 'yellow').length;
+  const allPRed = allPlats.filter(p => p.status === 'red').length;
+
   document.getElementById('platformSummaryBar').innerHTML = [
-    summaryCard('Total Platforms', data.length, '#6366f1', 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4'),
-    summaryCard('Healthy', green, '#10b981', 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'),
-    summaryCard('Warning', yellow, '#f59e0b', 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z'),
-    summaryCard('Critical', red, '#ef4444', 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z'),
+    platformSummaryCard('Total Platforms', allPlats.length, '#6366f1', 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4', 'total'),
+    platformSummaryCard('Healthy', allPGreen, '#10b981', 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', 'green'),
+    platformSummaryCard('Warning', allPYellow, '#f59e0b', 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z', 'yellow'),
+    platformSummaryCard('Critical', allPRed, '#ef4444', 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z', 'red'),
   ].join('');
 
   const arrow = (col) => {
