@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Health Dashboard</title>
+  <title>Foundry SSOT Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script>
@@ -21,548 +21,1023 @@
     }
   </script>
   <style>
-    body { background: #0f1117; }
-    .status-pulse { animation: pulse 2s infinite; }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-    .metric-card:hover { transform: translateY(-2px); transition: transform 0.15s; }
-    .metric-card { transition: transform 0.15s; }
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: #1a1d27; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f1117; }
     ::-webkit-scrollbar-thumb { background: #2a2d3a; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3a3d4a; }
+    .tooltip-container { position: relative; display: inline-flex; align-items: center; }
+    .tooltip-container .tooltip-text {
+      visibility: hidden; opacity: 0;
+      position: absolute; z-index: 50; bottom: calc(100% + 8px); left: 50%;
+      transform: translateX(-50%); width: 240px; padding: 8px 12px;
+      background: #1a1d27; color: #94a3b8; border: 1px solid #2a2d3a;
+      border-radius: 6px; font-size: 12px; font-weight: 400; line-height: 1.5;
+      white-space: normal; transition: opacity 0.15s ease, visibility 0.15s ease;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4); pointer-events: none;
+    }
+    .tooltip-container .tooltip-text::after {
+      content: ''; position: absolute; top: 100%; left: 50%;
+      margin-left: -5px; border-width: 5px; border-style: solid;
+      border-color: #2a2d3a transparent transparent transparent;
+    }
+    .tooltip-container:hover .tooltip-text { visibility: visible; opacity: 1; }
     .tab-active { border-bottom: 2px solid #6366f1; color: #e2e8f0; }
     .tab-inactive { border-bottom: 2px solid transparent; color: #64748b; }
     .tab-inactive:hover { color: #94a3b8; }
+    .subtab-active { background: #6366f1; color: white; }
+    .subtab-inactive { background: #1a1d27; color: #94a3b8; }
+    .subtab-inactive:hover { background: #2a2d3a; }
+    .sort-arrow { opacity: 0.3; transition: opacity 0.15s; }
+    .sort-arrow.active { opacity: 1; }
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { background: #1e2130; }
+    tr.data-row:hover { background: #1e2130; }
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      z-index: 100; display: flex; align-items: center; justify-content: center;
+      opacity: 0; transition: opacity 0.2s ease; pointer-events: none;
+    }
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+    .modal-panel {
+      background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 12px;
+      width: 90%; max-width: 720px; max-height: 85vh; overflow-y: auto;
+      transform: translateY(20px); transition: transform 0.2s ease;
+    }
+    .modal-overlay.open .modal-panel { transform: translateY(0); }
+    .expanded-row { display: none; }
+    .expanded-row.open { display: table-row; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 2px 10px; border-radius: 9999px; font-size: 12px; font-weight: 500;
+      white-space: nowrap;
+    }
+    .badge-green { background: rgba(16,185,129,0.15); color: #10b981; }
+    .badge-yellow { background: rgba(245,158,11,0.15); color: #f59e0b; }
+    .badge-red { background: rgba(239,68,68,0.15); color: #ef4444; }
+    .badge-gray { background: rgba(100,116,139,0.15); color: #64748b; }
+    .badge-empty { background: rgba(100,116,139,0.08); color: #475569; }
+    .inner-tab-active { border-bottom: 2px solid #6366f1; color: #e2e8f0; padding-bottom: 8px; }
+    .inner-tab-inactive { border-bottom: 2px solid transparent; color: #64748b; padding-bottom: 8px; }
+    .inner-tab-inactive:hover { color: #94a3b8; }
+    .chart-container { position: relative; }
+    table { border-collapse: separate; border-spacing: 0; }
+    thead th { position: sticky; top: 0; z-index: 10; }
   </style>
 </head>
-<body class="text-slate-300 min-h-screen">
+<body class="bg-surface text-slate-200 min-h-screen">
 
   <!-- Header -->
-  <header class="border-b border-border px-6 py-4 flex items-center justify-between">
-    <div class="flex items-center gap-3">
-      <div class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
-        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-        </svg>
+  <header class="border-b border-border px-6 py-4">
+    <div class="max-w-[1600px] mx-auto flex items-center justify-between gap-4 flex-wrap">
+      <div class="flex items-center gap-3">
+        <h1 class="text-xl font-semibold text-white tracking-tight">Foundry SSOT Dashboard</h1>
+        <span class="badge badge-gray text-[10px] uppercase tracking-wider font-semibold">Mockup</span>
       </div>
-      <h1 class="text-lg font-semibold text-white">Health Dashboard</h1>
-      <span class="text-xs bg-accent/20 text-accent px-2 py-0.5 rounded-full font-medium">MOCKUP</span>
-    </div>
-    <div class="flex items-center gap-4">
-      <span class="text-sm text-slate-500" id="lastUpdated">Last updated: just now</span>
-      <button onclick="refreshData()" class="text-sm bg-card border border-border rounded-lg px-3 py-1.5 hover:bg-border/50 transition-colors">
-        Refresh
-      </button>
+      <div class="flex items-center gap-3 flex-1 max-w-md">
+        <div class="relative flex-1">
+          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input id="globalSearch" type="text" placeholder="Search apps, platforms, domains..." class="w-full bg-card border border-border rounded-lg pl-10 pr-4 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors" oninput="handleSearch(this.value)">
+        </div>
+      </div>
+      <div class="flex items-center gap-3 text-sm text-slate-500">
+        <span id="lastUpdated">Last updated: 2026-06-16 09:15 UTC</span>
+        <button onclick="handleRefresh()" class="flex items-center gap-1.5 px-3 py-1.5 bg-card border border-border rounded-lg hover:bg-[#1e2130] transition-colors text-slate-300">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Refresh
+        </button>
+      </div>
     </div>
   </header>
 
-  <!-- Section Tabs -->
-  <nav class="px-6 pt-4 flex gap-6 border-b border-border">
-    <button onclick="showSection('app')" id="tab-app" class="pb-3 text-sm font-medium tab-active">App Health</button>
-    <button onclick="showSection('platform')" id="tab-platform" class="pb-3 text-sm font-medium tab-inactive">Platform Health</button>
-    <button onclick="showSection('foundry')" id="tab-foundry" class="pb-3 text-sm font-medium tab-inactive">Foundry Health</button>
+  <!-- Main Tabs -->
+  <nav class="border-b border-border px-6">
+    <div class="max-w-[1600px] mx-auto flex gap-6">
+      <button class="tab-active py-3 text-sm font-medium transition-colors" data-tab="appHealth" onclick="switchTab('appHealth')">App Health</button>
+      <button class="tab-inactive py-3 text-sm font-medium transition-colors" data-tab="platformHealth" onclick="switchTab('platformHealth')">Platform Health</button>
+      <button class="tab-inactive py-3 text-sm font-medium transition-colors" data-tab="appFoundry" onclick="switchTab('appFoundry')">App Foundry</button>
+    </div>
   </nav>
 
-  <!-- ===================== APP HEALTH ===================== -->
-  <section id="section-app" class="p-6">
-    <div class="mb-6">
-      <h2 class="text-xl font-semibold text-white mb-1">App Health Status</h2>
-      <p class="text-sm text-slate-500">End-user application performance and reliability</p>
-    </div>
+  <!-- Content Area -->
+  <main class="max-w-[1600px] mx-auto px-6 py-6">
 
-    <!-- Status row -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-      <div class="metric-card bg-card border border-border rounded-xl p-4">
-        <div class="flex items-center gap-2 mb-2">
-          <div class="w-2 h-2 rounded-full bg-emerald-400 status-pulse"></div>
-          <span class="text-xs text-slate-500 uppercase tracking-wide">Uptime</span>
+    <!-- Tab 1: App Health -->
+    <section id="tab-appHealth">
+      <!-- Summary Bar -->
+      <div id="appSummaryBar" class="grid grid-cols-5 gap-4 mb-6"></div>
+      <!-- Table -->
+      <div class="bg-card border border-border rounded-xl overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm" id="appHealthTable">
+            <thead id="appHealthThead"></thead>
+            <tbody id="appHealthTbody"></tbody>
+          </table>
         </div>
-        <p class="text-2xl font-bold text-white">99.97%</p>
-        <p class="text-xs text-emerald-400 mt-1">+0.02% vs last week</p>
       </div>
-      <div class="metric-card bg-card border border-border rounded-xl p-4">
-        <div class="flex items-center gap-2 mb-2">
-          <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
-          <span class="text-xs text-slate-500 uppercase tracking-wide">Error Rate</span>
-        </div>
-        <p class="text-2xl font-bold text-white">0.12%</p>
-        <p class="text-xs text-emerald-400 mt-1">-0.05% vs last week</p>
-      </div>
-      <div class="metric-card bg-card border border-border rounded-xl p-4">
-        <div class="flex items-center gap-2 mb-2">
-          <div class="w-2 h-2 rounded-full bg-amber-400"></div>
-          <span class="text-xs text-slate-500 uppercase tracking-wide">P50 Latency</span>
-        </div>
-        <p class="text-2xl font-bold text-white">187ms</p>
-        <p class="text-xs text-amber-400 mt-1">+12ms vs last week</p>
-      </div>
-      <div class="metric-card bg-card border border-border rounded-xl p-4">
-        <div class="flex items-center gap-2 mb-2">
-          <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
-          <span class="text-xs text-slate-500 uppercase tracking-wide">Active Users</span>
-        </div>
-        <p class="text-2xl font-bold text-white">12.4K</p>
-        <p class="text-xs text-emerald-400 mt-1">+8.3% vs last week</p>
-      </div>
-    </div>
+    </section>
 
-    <!-- Charts row -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-      <div class="bg-card border border-border rounded-xl p-5">
-        <h3 class="text-sm font-medium text-white mb-4">Response Time (24h)</h3>
-        <canvas id="appLatencyChart" height="200"></canvas>
+    <!-- Tab 2: Platform Health -->
+    <section id="tab-platformHealth" class="hidden">
+      <!-- Subtabs -->
+      <div class="flex gap-2 mb-6">
+        <button class="subtab-active px-4 py-2 rounded-lg text-sm font-medium transition-colors" data-subtab="supported" onclick="switchPlatformSubtab('supported')">Foundry Supported</button>
+        <button class="subtab-inactive px-4 py-2 rounded-lg text-sm font-medium transition-colors" data-subtab="nonSupported" onclick="switchPlatformSubtab('nonSupported')">Non-Supported</button>
       </div>
-      <div class="bg-card border border-border rounded-xl p-5">
-        <h3 class="text-sm font-medium text-white mb-4">Error Rate (24h)</h3>
-        <canvas id="appErrorChart" height="200"></canvas>
+      <!-- Summary Bar -->
+      <div id="platformSummaryBar" class="grid grid-cols-4 gap-4 mb-6"></div>
+      <!-- Table -->
+      <div class="bg-card border border-border rounded-xl overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm" id="platformHealthTable">
+            <thead id="platformHealthThead"></thead>
+            <tbody id="platformHealthTbody"></tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </section>
 
-    <!-- Endpoints table -->
-    <div class="bg-card border border-border rounded-xl p-5">
-      <h3 class="text-sm font-medium text-white mb-4">Endpoint Status</h3>
-      <table class="w-full text-sm">
-        <thead>
-          <tr class="text-slate-500 text-left border-b border-border">
-            <th class="pb-3 font-medium">Endpoint</th>
-            <th class="pb-3 font-medium">Status</th>
-            <th class="pb-3 font-medium">Latency</th>
-            <th class="pb-3 font-medium">Error Rate</th>
-            <th class="pb-3 font-medium">Requests/min</th>
-          </tr>
-        </thead>
-        <tbody id="endpointTable"></tbody>
-      </table>
-    </div>
-  </section>
+    <!-- Tab 3: App Foundry -->
+    <section id="tab-appFoundry" class="hidden">
+      <!-- Big Metrics -->
+      <div class="grid grid-cols-2 gap-4 mb-6" id="foundryUptimeCards"></div>
+      <!-- Coverage Section -->
+      <div class="bg-card border border-border rounded-xl p-5 mb-6">
+        <h3 class="text-base font-semibold text-white mb-4">Test Coverage Breakdown</h3>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4" id="coverageGrid"></div>
+      </div>
+      <!-- Charts Row -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="bg-card border border-border rounded-xl p-5">
+          <h3 class="text-sm font-semibold text-white mb-3">Test Coverage Across Apps</h3>
+          <div class="chart-container" style="height:280px"><canvas id="stackedBarChart"></canvas></div>
+        </div>
+        <div class="bg-card border border-border rounded-xl p-5">
+          <h3 class="text-sm font-semibold text-white mb-3">App Health Trend (8 Weeks)</h3>
+          <div class="chart-container" style="height:280px"><canvas id="lineChart"></canvas></div>
+        </div>
+        <div class="bg-card border border-border rounded-xl p-5">
+          <h3 class="text-sm font-semibold text-white mb-3">Overall App Status Distribution</h3>
+          <div class="chart-container" style="height:280px"><canvas id="donutChart"></canvas></div>
+        </div>
+      </div>
+    </section>
+  </main>
 
-  <!-- ===================== PLATFORM HEALTH ===================== -->
-  <section id="section-platform" class="p-6 hidden">
-    <div class="mb-6">
-      <h2 class="text-xl font-semibold text-white mb-1">Platform Health Status</h2>
-      <p class="text-sm text-slate-500">Infrastructure, services, and system resources</p>
+  <!-- App Detail Modal -->
+  <div id="appModal" class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal-panel">
+      <div class="flex items-center justify-between p-5 border-b border-border">
+        <h2 id="modalTitle" class="text-lg font-semibold text-white"></h2>
+        <button onclick="closeModal()" class="text-slate-500 hover:text-white transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <!-- Modal inner tabs -->
+      <div class="flex gap-6 px-5 pt-4 border-b border-border">
+        <button class="inner-tab-active text-sm font-medium cursor-pointer" data-mtab="testStatus" onclick="switchModalTab('testStatus')">Test Status</button>
+        <button class="inner-tab-inactive text-sm font-medium cursor-pointer" data-mtab="appMeta" onclick="switchModalTab('appMeta')">App Metadata</button>
+      </div>
+      <div id="modalContent" class="p-5"></div>
     </div>
+  </div>
 
-    <!-- Status row -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-      <div class="metric-card bg-card border border-border rounded-xl p-4">
-        <div class="flex items-center gap-2 mb-2">
-          <div class="w-2 h-2 rounded-full bg-emerald-400 status-pulse"></div>
-          <span class="text-xs text-slate-500 uppercase tracking-wide">API Gateway</span>
-        </div>
-        <p class="text-2xl font-bold text-white">Healthy</p>
-        <p class="text-xs text-slate-500 mt-1">All regions operational</p>
+  <!-- Platform Detail Modal -->
+  <div id="platformModal" class="modal-overlay" onclick="if(event.target===this)closePlatformModal()">
+    <div class="modal-panel">
+      <div class="flex items-center justify-between p-5 border-b border-border">
+        <h2 id="platformModalTitle" class="text-lg font-semibold text-white"></h2>
+        <button onclick="closePlatformModal()" class="text-slate-500 hover:text-white transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
       </div>
-      <div class="metric-card bg-card border border-border rounded-xl p-4">
-        <div class="flex items-center gap-2 mb-2">
-          <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
-          <span class="text-xs text-slate-500 uppercase tracking-wide">Database</span>
-        </div>
-        <p class="text-2xl font-bold text-white">Healthy</p>
-        <p class="text-xs text-slate-500 mt-1">Primary + 2 replicas</p>
-      </div>
-      <div class="metric-card bg-card border border-border rounded-xl p-4">
-        <div class="flex items-center gap-2 mb-2">
-          <div class="w-2 h-2 rounded-full bg-amber-400 status-pulse"></div>
-          <span class="text-xs text-slate-500 uppercase tracking-wide">Queue Depth</span>
-        </div>
-        <p class="text-2xl font-bold text-white">1,247</p>
-        <p class="text-xs text-amber-400 mt-1">Above normal threshold</p>
-      </div>
-      <div class="metric-card bg-card border border-border rounded-xl p-4">
-        <div class="flex items-center gap-2 mb-2">
-          <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
-          <span class="text-xs text-slate-500 uppercase tracking-wide">Cache Hit</span>
-        </div>
-        <p class="text-2xl font-bold text-white">94.2%</p>
-        <p class="text-xs text-emerald-400 mt-1">+1.1% vs last week</p>
-      </div>
+      <div id="platformModalContent" class="p-5"></div>
     </div>
-
-    <!-- Resource gauges -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      <div class="bg-card border border-border rounded-xl p-5">
-        <h3 class="text-sm font-medium text-white mb-3">CPU Utilization</h3>
-        <div class="flex items-end gap-3">
-          <span class="text-3xl font-bold text-white">62%</span>
-          <span class="text-sm text-slate-500 mb-1">avg across 8 nodes</span>
-        </div>
-        <div class="mt-3 h-2 bg-border rounded-full overflow-hidden">
-          <div class="h-full bg-accent rounded-full" style="width: 62%"></div>
-        </div>
-      </div>
-      <div class="bg-card border border-border rounded-xl p-5">
-        <h3 class="text-sm font-medium text-white mb-3">Memory Usage</h3>
-        <div class="flex items-end gap-3">
-          <span class="text-3xl font-bold text-white">71%</span>
-          <span class="text-sm text-slate-500 mb-1">18.2 / 25.6 GB</span>
-        </div>
-        <div class="mt-3 h-2 bg-border rounded-full overflow-hidden">
-          <div class="h-full bg-amber-400 rounded-full" style="width: 71%"></div>
-        </div>
-      </div>
-      <div class="bg-card border border-border rounded-xl p-5">
-        <h3 class="text-sm font-medium text-white mb-3">Disk I/O</h3>
-        <div class="flex items-end gap-3">
-          <span class="text-3xl font-bold text-white">34%</span>
-          <span class="text-sm text-slate-500 mb-1">well within limits</span>
-        </div>
-        <div class="mt-3 h-2 bg-border rounded-full overflow-hidden">
-          <div class="h-full bg-emerald-400 rounded-full" style="width: 34%"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Charts -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-      <div class="bg-card border border-border rounded-xl p-5">
-        <h3 class="text-sm font-medium text-white mb-4">Request Throughput (24h)</h3>
-        <canvas id="platformThroughputChart" height="200"></canvas>
-      </div>
-      <div class="bg-card border border-border rounded-xl p-5">
-        <h3 class="text-sm font-medium text-white mb-4">Queue Depth (24h)</h3>
-        <canvas id="platformQueueChart" height="200"></canvas>
-      </div>
-    </div>
-
-    <!-- Services table -->
-    <div class="bg-card border border-border rounded-xl p-5">
-      <h3 class="text-sm font-medium text-white mb-4">Service Status</h3>
-      <table class="w-full text-sm">
-        <thead>
-          <tr class="text-slate-500 text-left border-b border-border">
-            <th class="pb-3 font-medium">Service</th>
-            <th class="pb-3 font-medium">Status</th>
-            <th class="pb-3 font-medium">Instances</th>
-            <th class="pb-3 font-medium">CPU</th>
-            <th class="pb-3 font-medium">Memory</th>
-            <th class="pb-3 font-medium">Last Deploy</th>
-          </tr>
-        </thead>
-        <tbody id="serviceTable"></tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- ===================== FOUNDRY HEALTH ===================== -->
-  <section id="section-foundry" class="p-6 hidden">
-    <div class="mb-6">
-      <h2 class="text-xl font-semibold text-white mb-1">Foundry Health Status</h2>
-      <p class="text-sm text-slate-500">Skills, agents, and Foundry team delivery metrics</p>
-    </div>
-
-    <!-- Status row -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-      <div class="metric-card bg-card border border-border rounded-xl p-4">
-        <div class="flex items-center gap-2 mb-2">
-          <div class="w-2 h-2 rounded-full bg-emerald-400 status-pulse"></div>
-          <span class="text-xs text-slate-500 uppercase tracking-wide">Skills Deployed</span>
-        </div>
-        <p class="text-2xl font-bold text-white">34</p>
-        <p class="text-xs text-emerald-400 mt-1">+3 this week</p>
-      </div>
-      <div class="metric-card bg-card border border-border rounded-xl p-4">
-        <div class="flex items-center gap-2 mb-2">
-          <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
-          <span class="text-xs text-slate-500 uppercase tracking-wide">Build Success</span>
-        </div>
-        <p class="text-2xl font-bold text-white">96.4%</p>
-        <p class="text-xs text-emerald-400 mt-1">+2.1% vs last week</p>
-      </div>
-      <div class="metric-card bg-card border border-border rounded-xl p-4">
-        <div class="flex items-center gap-2 mb-2">
-          <div class="w-2 h-2 rounded-full bg-red-400 status-pulse"></div>
-          <span class="text-xs text-slate-500 uppercase tracking-wide">Failed Tasks</span>
-        </div>
-        <p class="text-2xl font-bold text-white">7</p>
-        <p class="text-xs text-red-400 mt-1">3 need attention</p>
-      </div>
-      <div class="metric-card bg-card border border-border rounded-xl p-4">
-        <div class="flex items-center gap-2 mb-2">
-          <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
-          <span class="text-xs text-slate-500 uppercase tracking-wide">Agent Uptime</span>
-        </div>
-        <p class="text-2xl font-bold text-white">99.8%</p>
-        <p class="text-xs text-slate-500 mt-1">Across all active agents</p>
-      </div>
-    </div>
-
-    <!-- Charts -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-      <div class="bg-card border border-border rounded-xl p-5">
-        <h3 class="text-sm font-medium text-white mb-4">Skills Deployed Over Time</h3>
-        <canvas id="foundrySkillsChart" height="200"></canvas>
-      </div>
-      <div class="bg-card border border-border rounded-xl p-5">
-        <h3 class="text-sm font-medium text-white mb-4">Task Completion Rate (7d)</h3>
-        <canvas id="foundryTaskChart" height="200"></canvas>
-      </div>
-    </div>
-
-    <!-- Skills table -->
-    <div class="bg-card border border-border rounded-xl p-5">
-      <h3 class="text-sm font-medium text-white mb-4">Recent Skill Deployments</h3>
-      <table class="w-full text-sm">
-        <thead>
-          <tr class="text-slate-500 text-left border-b border-border">
-            <th class="pb-3 font-medium">Skill</th>
-            <th class="pb-3 font-medium">Status</th>
-            <th class="pb-3 font-medium">Version</th>
-            <th class="pb-3 font-medium">Invocations (24h)</th>
-            <th class="pb-3 font-medium">Avg Duration</th>
-            <th class="pb-3 font-medium">Last Deployed</th>
-          </tr>
-        </thead>
-        <tbody id="skillTable"></tbody>
-      </table>
-    </div>
-  </section>
+  </div>
 
 <script>
-// ── Tab navigation ──
-function showSection(name) {
-  ['app', 'platform', 'foundry'].forEach(s => {
-    document.getElementById(`section-${s}`).classList.toggle('hidden', s !== name);
-    document.getElementById(`tab-${s}`).className = s === name
-      ? 'pb-3 text-sm font-medium tab-active'
-      : 'pb-3 text-sm font-medium tab-inactive';
+// ─── SEED DATA ───────────────────────────────────────────────────────
+const apps = [
+  { name: "Looker", type: "MCP", domain: "Data Science", owner: "Foundry", status: "green", repo: "mercor-looker", source: "CS", serviceType: "Offline", frontend: "Tabular UI", verifier: "Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.8, lastRun: "2026-06-16 09:15", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 95, synthSupport: true, populateDuration: 1.2, snapshotDuration: 0.8, snapshotSize: 45 },
+  { name: "SQL Execution", type: "MCP", domain: "Data Science", owner: "Foundry", status: "green", repo: "mercor-rls-sql-execution", source: "OS", serviceType: "Offline", frontend: "None", verifier: "Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.9, lastRun: "2026-06-16 09:15", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 98, synthSupport: true, populateDuration: 0.5, snapshotDuration: 0.3, snapshotSize: 12 },
+  { name: "Tableau", type: "MCP", domain: "Data Science", owner: "Foundry", status: "green", repo: "mercor-tableau", source: "CS", serviceType: "Offline", frontend: "Tabular UI", verifier: "Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.7, lastRun: "2026-06-16 09:15", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 92, synthSupport: true, populateDuration: 1.5, snapshotDuration: 1.0, snapshotSize: 65 },
+  { name: "ADP Employment", type: "MCP", domain: "Finance", owner: "Foundry", status: "green", repo: "mercor-adp", source: "CS", serviceType: "Offline", frontend: "Tabular UI", verifier: "Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.6, lastRun: "2026-06-16 08:45", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 90, synthSupport: true, populateDuration: 1.8, snapshotDuration: 1.2, snapshotSize: 55 },
+  { name: "EDGAR SEC", type: "MCP", domain: "Finance", owner: "Foundry", status: "green", repo: "mercor-edgarsec", source: "CS", serviceType: "Offline", frontend: "Tabular UI", verifier: "Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.5, lastRun: "2026-06-16 09:00", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 93, synthSupport: true, populateDuration: 2.0, snapshotDuration: 1.5, snapshotSize: 80 },
+  { name: "QuickBooks", type: "MCP", domain: "Finance", owner: "Foundry", status: "green", repo: "mercor-quickbooks", source: "CS", serviceType: "Offline", frontend: "Tabular UI", verifier: "Custom, Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.8, lastRun: "2026-06-16 09:15", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 91, synthSupport: true, populateDuration: 1.3, snapshotDuration: 0.9, snapshotSize: 42 },
+  { name: "Xero", type: "MCP", domain: "Finance", owner: "Foundry", status: "green", repo: "mercor-xero", source: "CS", serviceType: "Offline", frontend: "Tabular UI", verifier: "Custom, Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.7, lastRun: "2026-06-16 09:15", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 94, synthSupport: true, populateDuration: 1.1, snapshotDuration: 0.7, snapshotSize: 38 },
+  { name: "TaxJar", type: "MCP", domain: "Finance", owner: "Foundry", status: "green", repo: "mercor-taxjar", source: "CS", serviceType: "Offline", frontend: "Tabular UI", verifier: "Custom, Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.6, lastRun: "2026-06-16 09:00", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 90, synthSupport: true, populateDuration: 1.0, snapshotDuration: 0.6, snapshotSize: 30 },
+  { name: "Terrapin", type: "MCP", domain: "Finance", owner: "Foundry", status: "green", repo: "mercor-terrapin", source: "CS", serviceType: "Offline", frontend: "Tabular UI", verifier: "Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.8, lastRun: "2026-06-16 09:15", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 96, synthSupport: true, populateDuration: 0.8, snapshotDuration: 0.5, snapshotSize: 25 },
+  { name: "FMP", type: "MCP & BUA", domain: "Finance", owner: "Foundry", status: "green", repo: "mercor-fmp", source: "CS", serviceType: "Offline", frontend: "Tabular UI", verifier: "Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.5, lastRun: "2026-06-16 08:30", psp: "pass", platform: "pass", e2e: "fail", seedDoc: true, seedPassRate: 88, synthSupport: true, populateDuration: 2.5, snapshotDuration: 1.8, snapshotSize: 95 },
+  { name: "Code Execution", type: "MCP", domain: "General", owner: "Foundry", status: "green", repo: "mercor-rls-code-execution", source: "OS", serviceType: "Offline", frontend: "None", verifier: "Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.9, lastRun: "2026-06-16 09:15", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 99, synthSupport: true, populateDuration: 0.3, snapshotDuration: 0.2, snapshotSize: 8 },
+  { name: "Web Search", type: "MCP", domain: "General", owner: "Foundry", status: "green", repo: "mercor-rls-websearch", source: "OS", serviceType: "Live", frontend: "None", verifier: "Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.8, lastRun: "2026-06-16 09:15", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 97, synthSupport: false, populateDuration: 0.1, snapshotDuration: 0.1, snapshotSize: 2 },
+  { name: "Calendar", type: "MCP", domain: "Workspace", owner: "Foundry", status: "green", repo: "mercor-rls-calendar", source: "OS", serviceType: "Offline", frontend: "None", verifier: "Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.9, lastRun: "2026-06-16 09:15", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 96, synthSupport: true, populateDuration: 0.4, snapshotDuration: 0.2, snapshotSize: 5 },
+  { name: "Chat", type: "MCP", domain: "Workspace", owner: "Foundry", status: "green", repo: "mercor-rls-chat", source: "OS", serviceType: "Offline", frontend: "None", verifier: "Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.9, lastRun: "2026-06-16 09:15", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 95, synthSupport: true, populateDuration: 0.3, snapshotDuration: 0.2, snapshotSize: 4 },
+  { name: "Docs", type: "MCP", domain: "Workspace", owner: "Foundry", status: "green", repo: "mercor-rls-docs", source: "OS", serviceType: "Offline", frontend: "None", verifier: "Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.8, lastRun: "2026-06-16 09:15", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 94, synthSupport: true, populateDuration: 0.5, snapshotDuration: 0.3, snapshotSize: 10 },
+  { name: "Mail", type: "MCP", domain: "Workspace", owner: "Foundry", status: "green", repo: "mercor-rls-mail", source: "OS", serviceType: "Offline", frontend: "None", verifier: "Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.9, lastRun: "2026-06-16 09:15", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 97, synthSupport: true, populateDuration: 0.4, snapshotDuration: 0.2, snapshotSize: 6 },
+  { name: "Sheets", type: "MCP", domain: "Workspace", owner: "Foundry", status: "green", repo: "mercor-rls-sheets", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.8, lastRun: "2026-06-16 09:15", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 93, synthSupport: true, populateDuration: 0.6, snapshotDuration: 0.4, snapshotSize: 15 },
+  { name: "Slides", type: "MCP", domain: "Workspace", owner: "Foundry", status: "green", repo: "mercor-rls-slides", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.7, lastRun: "2026-06-16 09:15", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 91, synthSupport: true, populateDuration: 0.7, snapshotDuration: 0.5, snapshotSize: 20 },
+  { name: "ERPNext", type: "MCP & BUA", domain: "ERP", owner: "Foundry", status: "green", repo: "mercor-bua-erpnext", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "green", seeding: "green", workflow: "green", performance: "yellow", uptime: 98.5, lastRun: "2026-06-16 08:00", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 88, synthSupport: true, populateDuration: 3.5, snapshotDuration: 2.8, snapshotSize: 850 },
+  { name: "OpenEMR", type: "BUA", domain: "Healthcare", owner: "Foundry", status: "yellow", repo: "mercor-bua-openemr", source: "CS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "yellow", seeding: "green", workflow: "yellow", performance: "yellow", uptime: 96.2, lastRun: "2026-06-16 07:30", psp: "fail", platform: "pass", e2e: "fail", seedDoc: true, seedPassRate: 85, synthSupport: true, populateDuration: 4.2, snapshotDuration: 3.5, snapshotSize: 1200 },
+  { name: "Grafana", type: "MCP & BUA", domain: "Analytics", owner: "Foundry", status: "yellow", repo: "mercor-bua-grafana", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "yellow", seeding: "green", workflow: "green", performance: "green", uptime: 97.8, lastRun: "2026-06-16 08:45", psp: "not_found", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 90, synthSupport: false, populateDuration: 2.8, snapshotDuration: 2.0, snapshotSize: 320 },
+  { name: "Nextcloud", type: "MCP & BUA", domain: "Workspace", owner: "Foundry", status: "green", repo: "mercor-bua-nextcloud", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.1, lastRun: "2026-06-16 09:00", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 92, synthSupport: true, populateDuration: 2.2, snapshotDuration: 1.8, snapshotSize: 280 },
+  { name: "Chatwoot", type: "MCP & BUA", domain: "Commerce", owner: "Foundry", status: "red", repo: "mercor-bua-chatwoot", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "red", seeding: "yellow", workflow: "red", performance: "yellow", uptime: 91.3, lastRun: "2026-06-16 06:00", psp: "fail", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 72, synthSupport: false, populateDuration: 3.8, snapshotDuration: 2.5, snapshotSize: 450 },
+  { name: "Odoo", type: "MCP & BUA", domain: "Finance", owner: "Foundry", status: "yellow", repo: "mercor-bua-odoo", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "yellow", seeding: "yellow", workflow: "green", performance: "yellow", uptime: 95.4, lastRun: "2026-06-16 07:00", psp: "not_found", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 80, synthSupport: false, populateDuration: 4.5, snapshotDuration: 3.2, snapshotSize: 980 },
+  { name: "Moodle", type: "BUA", domain: "Education", owner: "Foundry", status: "red", repo: "mercor-bua-moodle", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "red", seeding: "red", workflow: "red", performance: "yellow", uptime: 88.7, lastRun: "2026-06-15 23:00", psp: "not_found", platform: "fail", e2e: "fail", seedDoc: false, seedPassRate: 55, synthSupport: false, populateDuration: 5.2, snapshotDuration: 4.0, snapshotSize: 1800 },
+  { name: "Canvas", type: "MCP & BUA", domain: "Education", owner: "Foundry", status: "yellow", repo: "mercor-bua-canvas", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "yellow", seeding: "green", workflow: "yellow", performance: "green", uptime: 97.1, lastRun: "2026-06-16 08:30", psp: "not_found", platform: "pass", e2e: "pending", seedDoc: true, seedPassRate: 87, synthSupport: true, populateDuration: 2.9, snapshotDuration: 2.1, snapshotSize: 350 },
+  { name: "JupyterHub", type: "MCP & BUA", domain: "Analytics", owner: "Foundry", status: "yellow", repo: "mercor-bua-jupyterhub", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "yellow", seeding: "green", workflow: "green", performance: "yellow", uptime: 96.5, lastRun: "2026-06-16 07:45", psp: "not_found", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 83, synthSupport: false, populateDuration: 3.4, snapshotDuration: 2.8, snapshotSize: 520 },
+  { name: "Metabase", type: "MCP & BUA", domain: "Analytics", owner: "Foundry", status: "yellow", repo: "mercor-bua-metabase", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "yellow", seeding: "green", workflow: "green", performance: "yellow", uptime: 97.3, lastRun: "2026-06-16 08:15", psp: "not_applicable", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 86, synthSupport: false, populateDuration: 3.2, snapshotDuration: 2.4, snapshotSize: 410 },
+  { name: "Docuseal", type: "BUA", domain: "Legal", owner: "Foundry", status: "red", repo: "mercor-bua-docuseal", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "red", seeding: "red", workflow: "yellow", performance: "red", uptime: 85.2, lastRun: "2026-06-15 22:00", psp: "not_applicable", platform: "fail", e2e: "fail", seedDoc: false, seedPassRate: 40, synthSupport: false, populateDuration: 6.1, snapshotDuration: 4.8, snapshotSize: 2200 },
+  { name: "Fineract", type: "MCP & BUA", domain: "Finance", owner: "Workbench", status: "green", repo: "mercor-bua-fineract", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 98.9, lastRun: "2026-06-16 09:00", psp: "not_applicable", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 91, synthSupport: true, populateDuration: 2.5, snapshotDuration: 1.9, snapshotSize: 290 },
+  { name: "FASLR", type: "MCP & BUA", domain: "Finance", owner: "Workbench", status: "red", repo: "mercor-bua-faslr", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "red", seeding: "yellow", workflow: "yellow", performance: "red", uptime: 89.5, lastRun: "2026-06-16 06:30", psp: "not_applicable", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 70, synthSupport: false, populateDuration: 5.5, snapshotDuration: 4.2, snapshotSize: 1500 },
+  { name: "dbt", type: "MCP", domain: "Analytics", owner: "Workbench", status: "yellow", repo: "mercor-bua-dbt", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "yellow", seeding: "green", workflow: "green", performance: "yellow", uptime: 97.0, lastRun: "2026-06-16 08:00", psp: "not_applicable", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 85, synthSupport: false, populateDuration: 3.8, snapshotDuration: 2.9, snapshotSize: 380 },
+  { name: "Zotero", type: "MCP & BUA", domain: "Education", owner: "Workbench", status: "yellow", repo: "mercor-bua-zotero", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "yellow", seeding: "green", workflow: "yellow", performance: "green", uptime: 96.8, lastRun: "2026-06-16 08:30", psp: "pass", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 82, synthSupport: false, populateDuration: 2.0, snapshotDuration: 1.5, snapshotSize: 180 },
+  { name: "OpenEduCat", type: "MCP & BUA", domain: "Education", owner: "Workbench", status: "red", repo: "mercor-bua-openeducat", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "red", seeding: "red", workflow: "yellow", performance: "red", uptime: 87.3, lastRun: "2026-06-15 20:00", psp: "not_applicable", platform: "fail", e2e: "fail", seedDoc: false, seedPassRate: 50, synthSupport: false, populateDuration: 5.8, snapshotDuration: 4.5, snapshotSize: 1900 },
+  { name: "WikiJS", type: "BUA", domain: "Workspace", owner: "Foundry", status: "red", repo: "mercor-bua-wikijs", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "red", seeding: "yellow", workflow: "red", performance: "yellow", uptime: 90.1, lastRun: "2026-06-16 05:00", psp: "not_applicable", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 68, synthSupport: false, populateDuration: 4.0, snapshotDuration: 3.0, snapshotSize: 550 },
+  { name: "OpenBoxes", type: "MCP & BUA", domain: "Healthcare", owner: "Workbench", status: "red", repo: "mercor-bua-openboxes", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "red", seeding: "yellow", workflow: "red", performance: "red", uptime: 86.5, lastRun: "2026-06-16 04:00", psp: "not_applicable", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 65, synthSupport: false, populateDuration: 6.5, snapshotDuration: 5.0, snapshotSize: 2500 },
+  { name: "eLABftw", type: "MCP", domain: "Healthcare", owner: "Workbench", status: "green", repo: "mercor-mcp-elabftw", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.2, lastRun: "2026-06-16 09:00", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 93, synthSupport: true, populateDuration: 1.5, snapshotDuration: 1.0, snapshotSize: 75 },
+  { name: "Docassemble", type: "MCP & BUA", domain: "Legal", owner: "Foundry", status: "yellow", repo: "mercor-bua-docassemble", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "yellow", seeding: "green", workflow: "yellow", performance: "yellow", uptime: 95.8, lastRun: "2026-06-16 07:00", psp: "not_applicable", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 78, synthSupport: false, populateDuration: 4.0, snapshotDuration: 3.1, snapshotSize: 600 },
+  { name: "OpenClinica", type: "MCP", domain: "Healthcare", owner: "Workbench", status: "green", repo: "mercor-mcp-openclinica", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "Output LLM", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.0, lastRun: "2026-06-16 09:10", psp: "not_applicable", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 90, synthSupport: true, populateDuration: 1.8, snapshotDuration: 1.2, snapshotSize: 85 },
+  { name: "OpenInsure", type: "MCP", domain: "Legal", owner: "Foundry", status: "green", repo: "mercor-openinsurance", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "N/A", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.3, lastRun: "2026-06-16 09:15", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 94, synthSupport: true, populateDuration: 1.2, snapshotDuration: 0.8, snapshotSize: 50 },
+  { name: "Akaunting", type: "MCP & BUA", domain: "Finance", owner: "Foundry", status: "yellow", repo: "mercor-bua-akaunting", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "yellow", seeding: "yellow", workflow: "green", performance: "yellow", uptime: 96.0, lastRun: "2026-06-16 07:30", psp: "not_found", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 76, synthSupport: false, populateDuration: 3.5, snapshotDuration: 2.6, snapshotSize: 420 },
+  { name: "NocoDB", type: "MCP & BUA", domain: "Workspace", owner: "Foundry", status: "green", repo: "mercor-bua-nocodb", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "green", seeding: "green", workflow: "green", performance: "green", uptime: 99.0, lastRun: "2026-06-16 09:00", psp: "pass", platform: "pass", e2e: "pass", seedDoc: true, seedPassRate: 92, synthSupport: true, populateDuration: 1.8, snapshotDuration: 1.3, snapshotSize: 120 },
+  { name: "Gitea", type: "BUA", domain: "Workspace", owner: "Foundry", status: "yellow", repo: "mercor-bua-gitea", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "yellow", seeding: "green", workflow: "yellow", performance: "green", uptime: 97.5, lastRun: "2026-06-16 08:00", psp: "not_found", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 84, synthSupport: false, populateDuration: 2.5, snapshotDuration: 1.8, snapshotSize: 250 },
+  { name: "Keycloak", type: "BUA", domain: "Security", owner: "Foundry", status: "yellow", repo: "mercor-bua-keycloak", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "yellow", seeding: "green", workflow: "yellow", performance: "yellow", uptime: 96.8, lastRun: "2026-06-16 07:00", psp: "not_found", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 80, synthSupport: false, populateDuration: 3.8, snapshotDuration: 2.8, snapshotSize: 480 },
+  { name: "Mattermost", type: "BUA", domain: "Workspace", owner: "Foundry", status: "yellow", repo: "mercor-bua-mattermost", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "yellow", seeding: "green", workflow: "yellow", performance: "green", uptime: 97.2, lastRun: "2026-06-16 08:15", psp: "not_found", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 82, synthSupport: false, populateDuration: 2.8, snapshotDuration: 2.0, snapshotSize: 300 },
+  { name: "OpenProject", type: "BUA", domain: "Workspace", owner: "Foundry", status: "yellow", repo: "mercor-bua-openproject", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "yellow", seeding: "yellow", workflow: "yellow", performance: "yellow", uptime: 95.5, lastRun: "2026-06-16 07:00", psp: "not_found", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 75, synthSupport: false, populateDuration: 4.2, snapshotDuration: 3.2, snapshotSize: 650 },
+  { name: "CKAN", type: "MCP & BUA", domain: "Education", owner: "Foundry", status: "yellow", repo: "mercor-bua-ckan", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "yellow", seeding: "green", workflow: "yellow", performance: "yellow", uptime: 96.3, lastRun: "2026-06-16 08:00", psp: "not_applicable", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 81, synthSupport: false, populateDuration: 3.6, snapshotDuration: 2.7, snapshotSize: 390 },
+  { name: "Bika LIMS", type: "BUA", domain: "Engineering", owner: "Foundry", status: "yellow", repo: "mercor-bua-bika-lims", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "yellow", seeding: "yellow", workflow: "yellow", performance: "yellow", uptime: 95.0, lastRun: "2026-06-16 07:30", psp: "not_applicable", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 73, synthSupport: false, populateDuration: 4.8, snapshotDuration: 3.5, snapshotSize: 720 },
+  { name: "Decidim", type: "BUA", domain: "Government", owner: "Foundry", status: "yellow", repo: "mercor-bua-decidim", source: "OS", serviceType: "Offline", frontend: "Realistic", verifier: "DB diff", ci: "yellow", seeding: "green", workflow: "yellow", performance: "green", uptime: 97.0, lastRun: "2026-06-16 08:30", psp: "not_found", platform: "fail", e2e: "fail", seedDoc: true, seedPassRate: 85, synthSupport: false, populateDuration: 2.5, snapshotDuration: 1.8, snapshotSize: 210 },
+  { name: "PowerBI", type: "MCP", domain: "Data Science", owner: "Foundry", status: "deprecated", repo: "mercor-powerbi", source: "CS", serviceType: "Offline", frontend: "Tabular UI", verifier: "Output LLM", ci: "", seeding: "", workflow: "", performance: "", uptime: 0, lastRun: "2026-04-15 12:00", psp: "n/a", platform: "n/a", e2e: "n/a", seedDoc: false, seedPassRate: 0, synthSupport: false, populateDuration: 0, snapshotDuration: 0, snapshotSize: 0 },
+  { name: "USPTO", type: "MCP", domain: "Legal", owner: "Foundry", status: "deprecated", repo: "mercor-uspto", source: "OS", serviceType: "Offline", frontend: "None", verifier: "N/A", ci: "", seeding: "", workflow: "", performance: "", uptime: 0, lastRun: "2026-03-20 10:00", psp: "n/a", platform: "n/a", e2e: "n/a", seedDoc: false, seedPassRate: 0, synthSupport: false, populateDuration: 0, snapshotDuration: 0, snapshotSize: 0 },
+];
+
+const platforms = {
+  supported: [
+    { name: "Workbench - Info Services", status: "green", lastRun: "2026-06-16 09:00", uptime: 98.5, foundryCanary: { status: "pass", lastRan: "2026-06-16 08:45" }, accountCanary: { status: "pass", lastRan: "2026-06-16 08:30" }, apps: ["Grafana", "Metabase", "OpenNMS", "JupyterHub", "dbt"], redApps: 0, yellowApps: 2 },
+    { name: "Workbench - Natural Sciences", status: "yellow", lastRun: "2026-06-16 08:30", uptime: 96.2, foundryCanary: { status: "pass", lastRan: "2026-06-16 08:15" }, accountCanary: { status: "fail", lastRan: "2026-06-16 07:00" }, apps: ["eLABftw", "OpenClinica", "OpenBoxes", "Bika LIMS", "OpenEMR"], redApps: 1, yellowApps: 2 },
+    { name: "Workbench - Ops & Supply", status: "yellow", lastRun: "2026-06-16 08:00", uptime: 95.8, foundryCanary: { status: "pass", lastRan: "2026-06-16 07:45" }, accountCanary: { status: "fail", lastRan: "2026-06-16 06:30" }, apps: ["ERPNext", "OpenBoxes", "NocoDB", "Fineract"], redApps: 1, yellowApps: 0 },
+    { name: "Workbench - Eng & R&D", status: "green", lastRun: "2026-06-16 09:00", uptime: 97.5, foundryCanary: { status: "pass", lastRan: "2026-06-16 08:50" }, accountCanary: { status: "pass", lastRan: "2026-06-16 08:40" }, apps: ["OpenFOAM", "FreeCAD", "KICAD", "Bika LIMS", "JupyterHub"], redApps: 0, yellowApps: 2 },
+    { name: "Workbench - Public Health", status: "red", lastRun: "2026-06-16 07:00", uptime: 91.0, foundryCanary: { status: "fail", lastRan: "2026-06-16 06:30" }, accountCanary: { status: "fail", lastRan: "2026-06-16 06:00" }, apps: ["OpenEMR", "OpenBoxes", "OpenClinica", "OpenMRS"], redApps: 2, yellowApps: 1 },
+    { name: "Workbench - Med Devices & Pharma", status: "yellow", lastRun: "2026-06-16 08:00", uptime: 94.3, foundryCanary: { status: "pass", lastRan: "2026-06-16 07:30" }, accountCanary: { status: "fail", lastRan: "2026-06-16 07:00" }, apps: ["OpenEMR", "eLABftw", "Bika LIMS", "DICOM Viewer"], redApps: 0, yellowApps: 2 },
+    { name: "Apex v2.5", status: "green", lastRun: "2026-06-16 09:10", uptime: 99.1, foundryCanary: { status: "pass", lastRan: "2026-06-16 09:05" }, accountCanary: { status: "pass", lastRan: "2026-06-16 09:00" }, apps: ["Code Execution", "Web Search", "Docs", "Sheets", "Slides", "Mail", "Calendar", "Chat", "SQL Execution", "Terrapin", "Bloomberg", "FMP", "EDGAR SEC"], redApps: 0, yellowApps: 0 },
+    { name: "Apex v2", status: "green", lastRun: "2026-06-16 09:05", uptime: 99.3, foundryCanary: { status: "pass", lastRan: "2026-06-16 09:00" }, accountCanary: { status: "pass", lastRan: "2026-06-16 08:55" }, apps: ["Code Execution", "Web Search", "Docs", "Sheets", "Slides", "Mail", "Calendar", "Chat"], redApps: 0, yellowApps: 0 },
+  ],
+  nonSupported: [
+    { name: "Anthropic - Medical", status: "yellow", lastRun: "2026-06-15 18:00", uptime: 94.5, foundryCanary: { status: "n/a", lastRan: "N/A" }, accountCanary: { status: "fail", lastRan: "2026-06-15 17:00" }, apps: ["OpenEMR", "ERPNext", "DICOM Viewer"], redApps: 0, yellowApps: 1 },
+    { name: "GDM - Finance", status: "green", lastRun: "2026-06-16 08:00", uptime: 98.2, foundryCanary: { status: "n/a", lastRan: "N/A" }, accountCanary: { status: "pass", lastRan: "2026-06-16 07:30" }, apps: ["QuickBooks", "Xero", "FMP", "EDGAR SEC"], redApps: 0, yellowApps: 0 },
+    { name: "Education Pilot", status: "red", lastRun: "2026-06-14 12:00", uptime: 87.0, foundryCanary: { status: "n/a", lastRan: "N/A" }, accountCanary: { status: "fail", lastRan: "2026-06-14 11:00" }, apps: ["Canvas", "Moodle", "OpenEduCat", "Zotero", "CKAN"], redApps: 2, yellowApps: 2 },
+  ]
+};
+
+// ─── HELPERS ─────────────────────────────────────────────────────────
+const statusOrder = { red: 0, yellow: 1, green: 2, deprecated: 3, '': 4 };
+const statusEmoji = { green: '\u{1F7E2}', yellow: '\u{1F7E1}', red: '\u{1F534}', deprecated: '\u26AA', '': '' };
+
+function statusBadge(s) {
+  if (!s) return '<span class="badge badge-empty">--</span>';
+  const cls = { green: 'badge-green', yellow: 'badge-yellow', red: 'badge-red', deprecated: 'badge-gray' }[s] || 'badge-empty';
+  const label = s === 'green' ? 'Healthy' : s === 'yellow' ? 'Warning' : s === 'red' ? 'Critical' : s === 'deprecated' ? 'Deprecated' : '--';
+  const dot = s === 'green' ? '#10b981' : s === 'yellow' ? '#f59e0b' : s === 'red' ? '#ef4444' : s === 'deprecated' ? '#64748b' : '#475569';
+  return `<span class="badge ${cls}"><span class="status-dot" style="background:${dot}"></span>${label}</span>`;
+}
+
+function subStatusBadge(s) {
+  if (!s) return '<span class="badge badge-empty">--</span>';
+  const cls = { green: 'badge-green', yellow: 'badge-yellow', red: 'badge-red' }[s] || 'badge-empty';
+  const dot = s === 'green' ? '#10b981' : s === 'yellow' ? '#f59e0b' : s === 'red' ? '#ef4444' : '#475569';
+  const icon = s === 'green' ? '\u2713' : s === 'yellow' ? '!' : s === 'red' ? '\u2717' : '--';
+  return `<span class="badge ${cls}"><span class="status-dot" style="background:${dot}"></span>${icon}</span>`;
+}
+
+function uptimeColor(v) {
+  if (v >= 99) return 'text-emerald-400';
+  if (v >= 95) return 'text-yellow-400';
+  if (v > 0) return 'text-red-400';
+  return 'text-slate-600';
+}
+
+function canaryBadge(status, lastRan) {
+  const cls = status === 'pass' ? 'badge-green' : status === 'fail' ? 'badge-red' : 'badge-gray';
+  const label = status === 'pass' ? 'Pass' : status === 'fail' ? 'Fail' : 'N/A';
+  return `<div class="flex flex-col items-start gap-0.5"><span class="badge ${cls}">${label}</span><span class="text-[10px] text-slate-500">${lastRan}</span></div>`;
+}
+
+function testResultPill(val) {
+  if (!val || val === 'n/a') return '<span class="text-slate-600">N/A</span>';
+  if (val === 'pass') return '<span class="text-emerald-400 font-medium">Pass</span>';
+  if (val === 'fail') return '<span class="text-red-400 font-medium">Fail</span>';
+  if (val === 'pending') return '<span class="text-yellow-400 font-medium">Pending</span>';
+  if (val === 'not_found') return '<span class="text-slate-500">Not Found</span>';
+  if (val === 'not_applicable') return '<span class="text-slate-500">N/A</span>';
+  return `<span class="text-slate-500">${val}</span>`;
+}
+
+// ─── STATE ───────────────────────────────────────────────────────────
+let currentTab = 'appHealth';
+let currentPlatformSubtab = 'supported';
+let currentModalTab = 'testStatus';
+let currentModalApp = null;
+let appSortCol = 'status';
+let appSortDir = 'asc';
+let platformSortCol = 'status';
+let platformSortDir = 'asc';
+let searchQuery = '';
+
+// ─── TAB SWITCHING ───────────────────────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('[data-tab]').forEach(btn => {
+    btn.className = btn.dataset.tab === tab ? 'tab-active py-3 text-sm font-medium transition-colors' : 'tab-inactive py-3 text-sm font-medium transition-colors';
+  });
+  document.getElementById('tab-appHealth').classList.toggle('hidden', tab !== 'appHealth');
+  document.getElementById('tab-platformHealth').classList.toggle('hidden', tab !== 'platformHealth');
+  document.getElementById('tab-appFoundry').classList.toggle('hidden', tab !== 'appFoundry');
+  if (tab === 'appFoundry') renderFoundryTab();
+  if (tab === 'platformHealth') renderPlatformTab();
+  if (tab === 'appHealth') renderAppHealthTab();
+}
+
+function switchPlatformSubtab(sub) {
+  currentPlatformSubtab = sub;
+  document.querySelectorAll('[data-subtab]').forEach(btn => {
+    btn.className = btn.dataset.subtab === sub
+      ? 'subtab-active px-4 py-2 rounded-lg text-sm font-medium transition-colors'
+      : 'subtab-inactive px-4 py-2 rounded-lg text-sm font-medium transition-colors';
+  });
+  renderPlatformTab();
+}
+
+function switchModalTab(tab) {
+  currentModalTab = tab;
+  document.querySelectorAll('[data-mtab]').forEach(btn => {
+    btn.className = btn.dataset.mtab === tab ? 'inner-tab-active text-sm font-medium cursor-pointer' : 'inner-tab-inactive text-sm font-medium cursor-pointer';
+  });
+  renderModalContent();
+}
+
+// ─── SEARCH ──────────────────────────────────────────────────────────
+function handleSearch(q) {
+  searchQuery = q.toLowerCase();
+  if (currentTab === 'appHealth') renderAppHealthTab();
+  else if (currentTab === 'platformHealth') renderPlatformTab();
+}
+
+function handleRefresh() {
+  document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+  if (currentTab === 'appHealth') renderAppHealthTab();
+  else if (currentTab === 'platformHealth') renderPlatformTab();
+  else renderFoundryTab();
+}
+
+// ─── TOOLTIP HELPER ──────────────────────────────────────────────────
+function tip(text) {
+  return `<span class="tooltip-container ml-1 cursor-help"><span class="text-slate-500 text-xs">\u24D8</span><span class="tooltip-text">${text}</span></span>`;
+}
+
+// ─── APP HEALTH TABLE ────────────────────────────────────────────────
+const appColumns = [
+  { key: 'name', label: 'App Name', tip: 'The canonical app name in the Foundry registry.' },
+  { key: 'status', label: 'Status', tip: 'Overall health. Green if all 4 sub-statuses are green; Red if 2+ are red; Yellow otherwise.' },
+  { key: 'lastRun', label: 'Last Test Run', tip: 'Timestamp of the most recent automated test execution.' },
+  { key: 'uptime', label: 'Uptime', tip: 'Rolling 30-day availability percentage from synthetic monitoring.' },
+  { key: 'type', label: 'Type', tip: 'MCP = Model Context Protocol tool. BUA = Browser Use Agent. Some apps support both.' },
+  { key: 'domain', label: 'Domain', tip: 'Business domain the app serves (Finance, Healthcare, etc.).' },
+  { key: 'owner', label: 'Owner', tip: 'Team responsible for app maintenance and on-call.' },
+  { key: 'repo', label: 'Repo', tip: 'Link to the GitHub repository.' },
+  { key: 'ci', label: 'CI Status', tip: 'Continuous Integration: PSP, Platform, and E2E test results combined. Green = all pass; Red = half+ fail.' },
+  { key: 'seeding', label: 'Seeding', tip: 'Operational seeding health: documentation present, standard prompt pass rate, synthetic pipeline support.' },
+  { key: 'workflow', label: 'Workflow', tip: 'Workflow coverage status across all defined workflows for this app.' },
+  { key: 'performance', label: 'Performance', tip: 'Performance health: populate hook duration, snapshot duration, and snapshot size within SLA.' },
+];
+
+function getFilteredApps() {
+  let data = [...apps];
+  if (searchQuery) {
+    data = data.filter(a => {
+      const hay = [a.name, a.type, a.domain, a.owner, a.status, a.repo, a.lastRun].join(' ').toLowerCase();
+      return hay.includes(searchQuery);
+    });
+  }
+  const col = appSortCol;
+  data.sort((a, b) => {
+    let va = a[col], vb = b[col];
+    if (col === 'status') { va = statusOrder[va] ?? 5; vb = statusOrder[vb] ?? 5; }
+    else if (col === 'ci' || col === 'seeding' || col === 'workflow' || col === 'performance') { va = statusOrder[va] ?? 5; vb = statusOrder[vb] ?? 5; }
+    else if (col === 'uptime') { va = +va; vb = +vb; }
+    else { va = String(va || '').toLowerCase(); vb = String(vb || '').toLowerCase(); }
+    if (va < vb) return appSortDir === 'asc' ? -1 : 1;
+    if (va > vb) return appSortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+  return data;
+}
+
+function renderAppHealthTab() {
+  const data = getFilteredApps();
+  const active = data.filter(a => a.status !== 'deprecated');
+  const green = active.filter(a => a.status === 'green').length;
+  const yellow = active.filter(a => a.status === 'yellow').length;
+  const red = active.filter(a => a.status === 'red').length;
+  const dep = data.filter(a => a.status === 'deprecated').length;
+
+  document.getElementById('appSummaryBar').innerHTML = [
+    summaryCard('Total Apps', data.length, '#6366f1', 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z'),
+    summaryCard('Healthy', green, '#10b981', 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'),
+    summaryCard('Warning', yellow, '#f59e0b', 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z'),
+    summaryCard('Critical', red, '#ef4444', 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z'),
+    summaryCard('Deprecated', dep, '#64748b', 'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636'),
+  ].join('');
+
+  // Thead
+  const arrow = (col) => {
+    if (appSortCol !== col) return '<span class="sort-arrow ml-1">\u2195</span>';
+    return appSortDir === 'asc'
+      ? '<span class="sort-arrow active ml-1">\u2191</span>'
+      : '<span class="sort-arrow active ml-1">\u2193</span>';
+  };
+  document.getElementById('appHealthThead').innerHTML = '<tr>' + appColumns.map(c =>
+    `<th class="sortable px-3 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider bg-card border-b border-border whitespace-nowrap" onclick="sortAppCol('${c.key}')">
+      <span class="inline-flex items-center">${c.label}${tip(c.tip)}${arrow(c.key)}</span>
+    </th>`
+  ).join('') + '</tr>';
+
+  // Tbody
+  document.getElementById('appHealthTbody').innerHTML = data.map(a => `
+    <tr class="data-row border-b border-border/50 transition-colors">
+      <td class="px-3 py-2.5 whitespace-nowrap"><button class="text-accent hover:text-indigo-300 font-medium transition-colors text-left" onclick="openAppModal('${a.name}')">${a.name}</button></td>
+      <td class="px-3 py-2.5 whitespace-nowrap">${statusBadge(a.status)}</td>
+      <td class="px-3 py-2.5 whitespace-nowrap text-slate-400 text-xs">${a.lastRun}</td>
+      <td class="px-3 py-2.5 whitespace-nowrap"><span class="${uptimeColor(a.uptime)} font-medium">${a.uptime > 0 ? a.uptime.toFixed(1) + '%' : '--'}</span></td>
+      <td class="px-3 py-2.5 whitespace-nowrap"><span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300">${a.type}</span></td>
+      <td class="px-3 py-2.5 whitespace-nowrap text-slate-400">${a.domain}</td>
+      <td class="px-3 py-2.5 whitespace-nowrap text-slate-400">${a.owner}</td>
+      <td class="px-3 py-2.5 whitespace-nowrap"><a href="https://github.com/Mercor-Intelligence/${a.repo}" target="_blank" class="text-slate-500 hover:text-accent transition-colors" title="${a.repo}"><svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a></td>
+      <td class="px-3 py-2.5 whitespace-nowrap text-center">${subStatusBadge(a.ci)}</td>
+      <td class="px-3 py-2.5 whitespace-nowrap text-center">${subStatusBadge(a.seeding)}</td>
+      <td class="px-3 py-2.5 whitespace-nowrap text-center">${subStatusBadge(a.workflow)}</td>
+      <td class="px-3 py-2.5 whitespace-nowrap text-center">${subStatusBadge(a.performance)}</td>
+    </tr>
+  `).join('');
+}
+
+function sortAppCol(col) {
+  if (appSortCol === col) appSortDir = appSortDir === 'asc' ? 'desc' : 'asc';
+  else { appSortCol = col; appSortDir = 'asc'; }
+  renderAppHealthTab();
+}
+
+function summaryCard(label, value, color, iconPath) {
+  return `
+    <div class="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+      <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:${color}20">
+        <svg class="w-5 h-5" style="color:${color}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${iconPath}"/></svg>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-white">${value}</div>
+        <div class="text-xs text-slate-500">${label}</div>
+      </div>
+    </div>`;
+}
+
+// ─── APP DETAIL MODAL ────────────────────────────────────────────────
+function openAppModal(name) {
+  currentModalApp = apps.find(a => a.name === name);
+  if (!currentModalApp) return;
+  currentModalTab = 'testStatus';
+  document.querySelectorAll('[data-mtab]').forEach(btn => {
+    btn.className = btn.dataset.mtab === 'testStatus' ? 'inner-tab-active text-sm font-medium cursor-pointer' : 'inner-tab-inactive text-sm font-medium cursor-pointer';
+  });
+  document.getElementById('modalTitle').textContent = currentModalApp.name;
+  renderModalContent();
+  document.getElementById('appModal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('appModal').classList.remove('open');
+  currentModalApp = null;
+}
+
+function renderModalContent() {
+  const a = currentModalApp;
+  if (!a) return;
+  const el = document.getElementById('modalContent');
+
+  if (currentModalTab === 'testStatus') {
+    // Generate workflow list
+    const workflows = generateWorkflows(a);
+    el.innerHTML = `
+      <div class="space-y-5">
+        <!-- CI Tests -->
+        <div class="bg-surface rounded-lg border border-border p-4">
+          <div class="flex items-center gap-2 mb-3">
+            ${subStatusBadge(a.ci)}
+            <h4 class="text-sm font-semibold text-white">CI Tests</h4>
+          </div>
+          <div class="grid grid-cols-3 gap-3">
+            <div class="flex items-center justify-between bg-card rounded px-3 py-2 border border-border">
+              <span class="text-xs text-slate-400">PSP Tests</span>
+              ${testResultPill(a.psp)}
+            </div>
+            <div class="flex items-center justify-between bg-card rounded px-3 py-2 border border-border">
+              <span class="text-xs text-slate-400">Platform Tests</span>
+              ${testResultPill(a.platform)}
+            </div>
+            <div class="flex items-center justify-between bg-card rounded px-3 py-2 border border-border">
+              <span class="text-xs text-slate-400">E2E Tests</span>
+              ${testResultPill(a.e2e)}
+            </div>
+          </div>
+        </div>
+
+        <!-- Operational Seeding -->
+        <div class="bg-surface rounded-lg border border-border p-4">
+          <div class="flex items-center gap-2 mb-3">
+            ${subStatusBadge(a.seeding)}
+            <h4 class="text-sm font-semibold text-white">Operational Seeding</h4>
+          </div>
+          <div class="grid grid-cols-3 gap-3">
+            <div class="flex items-center justify-between bg-card rounded px-3 py-2 border border-border">
+              <span class="text-xs text-slate-400">Documentation</span>
+              <span class="${a.seedDoc ? 'text-emerald-400' : 'text-red-400'} font-medium">${a.seedDoc ? 'Present' : 'Missing'}</span>
+            </div>
+            <div class="flex items-center justify-between bg-card rounded px-3 py-2 border border-border">
+              <span class="text-xs text-slate-400">Prompt Pass Rate</span>
+              <span class="${a.seedPassRate >= 85 ? 'text-emerald-400' : a.seedPassRate >= 70 ? 'text-yellow-400' : 'text-red-400'} font-medium">${a.seedPassRate}%</span>
+            </div>
+            <div class="flex items-center justify-between bg-card rounded px-3 py-2 border border-border">
+              <span class="text-xs text-slate-400">Synthetic Pipelines</span>
+              <span class="${a.synthSupport ? 'text-emerald-400' : 'text-slate-500'} font-medium">${a.synthSupport ? 'Supported' : 'Not Available'}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Workflow Coverage -->
+        <div class="bg-surface rounded-lg border border-border p-4">
+          <div class="flex items-center gap-2 mb-3">
+            ${subStatusBadge(a.workflow)}
+            <h4 class="text-sm font-semibold text-white">Workflow Coverage</h4>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            ${workflows.map(w => `
+              <div class="flex items-center justify-between bg-card rounded px-3 py-2 border border-border">
+                <span class="text-xs text-slate-400">${w.name}</span>
+                ${testResultPill(w.status)}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Performance -->
+        <div class="bg-surface rounded-lg border border-border p-4">
+          <div class="flex items-center gap-2 mb-3">
+            ${subStatusBadge(a.performance)}
+            <h4 class="text-sm font-semibold text-white">Performance</h4>
+          </div>
+          <div class="grid grid-cols-3 gap-3">
+            <div class="bg-card rounded px-3 py-2 border border-border">
+              <div class="text-xs text-slate-500 mb-1">Populate Hook</div>
+              <div class="text-lg font-semibold ${a.populateDuration <= 2 ? 'text-emerald-400' : a.populateDuration <= 4 ? 'text-yellow-400' : 'text-red-400'}">${a.populateDuration}s</div>
+            </div>
+            <div class="bg-card rounded px-3 py-2 border border-border">
+              <div class="text-xs text-slate-500 mb-1">Snapshot Duration</div>
+              <div class="text-lg font-semibold ${a.snapshotDuration <= 1.5 ? 'text-emerald-400' : a.snapshotDuration <= 3 ? 'text-yellow-400' : 'text-red-400'}">${a.snapshotDuration}s</div>
+            </div>
+            <div class="bg-card rounded px-3 py-2 border border-border">
+              <div class="text-xs text-slate-500 mb-1">Snapshot Size</div>
+              <div class="text-lg font-semibold ${a.snapshotSize <= 100 ? 'text-emerald-400' : a.snapshotSize <= 500 ? 'text-yellow-400' : 'text-red-400'}">${a.snapshotSize} MB</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  } else {
+    // App Metadata tab
+    el.innerHTML = `
+      <div class="space-y-4">
+        <div class="grid grid-cols-2 gap-4">
+          <div class="bg-surface rounded-lg border border-border p-4">
+            <div class="text-xs text-slate-500 mb-1">Verifier Type</div>
+            <div class="text-sm font-medium text-white">${a.verifier}</div>
+          </div>
+          <div class="bg-surface rounded-lg border border-border p-4">
+            <div class="text-xs text-slate-500 mb-1">Service Type</div>
+            <div class="text-sm font-medium text-white">${a.serviceType}</div>
+          </div>
+          <div class="bg-surface rounded-lg border border-border p-4">
+            <div class="text-xs text-slate-500 mb-1">Frontend Type</div>
+            <div class="text-sm font-medium text-white">${a.frontend}</div>
+          </div>
+          <div class="bg-surface rounded-lg border border-border p-4">
+            <div class="text-xs text-slate-500 mb-1">Source</div>
+            <div class="text-sm font-medium text-white">${a.source === 'OS' ? 'Open Source' : 'Closed Source'}</div>
+          </div>
+        </div>
+        <div class="bg-surface rounded-lg border border-border p-4">
+          <div class="text-xs text-slate-500 mb-2">Additional Details</div>
+          <div class="grid grid-cols-2 gap-3 text-sm">
+            <div class="flex justify-between"><span class="text-slate-400">Type</span><span class="text-white">${a.type}</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Domain</span><span class="text-white">${a.domain}</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Owner</span><span class="text-white">${a.owner}</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Repository</span><a href="https://github.com/Mercor-Intelligence/${a.repo}" target="_blank" class="text-accent hover:text-indigo-300">${a.repo}</a></div>
+            <div class="flex justify-between"><span class="text-slate-400">Last Test Run</span><span class="text-white">${a.lastRun}</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Uptime (30d)</span><span class="${uptimeColor(a.uptime)}">${a.uptime > 0 ? a.uptime.toFixed(1) + '%' : 'N/A'}</span></div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+}
+
+function generateWorkflows(a) {
+  // Generate realistic workflow names based on domain/type
+  const domainWorkflows = {
+    'Data Science': ['Data Query', 'Dashboard View', 'Report Export', 'Filter & Drill-down'],
+    'Finance': ['Transaction Entry', 'Report Generation', 'Account Reconciliation', 'Invoice Processing'],
+    'General': ['Core Execution', 'Input Validation', 'Output Formatting'],
+    'Workspace': ['Create Item', 'Edit Item', 'Share/Collaborate', 'Search & Filter'],
+    'ERP': ['Sales Order', 'Purchase Order', 'Inventory Check', 'Report Generation', 'User Management'],
+    'Healthcare': ['Patient Lookup', 'Record Entry', 'Prescription Flow', 'Reporting'],
+    'Analytics': ['Dashboard Load', 'Query Builder', 'Data Source Config', 'Alert Setup'],
+    'Commerce': ['Customer Lookup', 'Conversation Thread', 'Template Usage', 'Integration Sync'],
+    'Education': ['Course Management', 'Student Enrollment', 'Assignment Grading', 'Content Upload'],
+    'Legal': ['Document Assembly', 'Template Fill', 'Signature Flow', 'Compliance Check'],
+    'Security': ['User Provisioning', 'Role Assignment', 'Auth Flow', 'Token Management'],
+    'Engineering': ['Sample Registration', 'Test Execution', 'Result Reporting', 'QC Workflow'],
+    'Government': ['Proposal Creation', 'Voting Process', 'Public Comment', 'Reporting'],
+  };
+  const wfs = domainWorkflows[a.domain] || ['Core Workflow', 'Secondary Flow', 'Reporting'];
+  const statusValues = a.status === 'deprecated' ? [] : wfs.map((_, i) => {
+    if (a.workflow === 'green') return 'pass';
+    if (a.workflow === 'red') return i < Math.ceil(wfs.length / 2) ? 'fail' : 'pass';
+    // yellow = some fail, some pass
+    return i === 0 ? 'fail' : 'pass';
+  });
+  return wfs.map((name, i) => ({ name, status: statusValues[i] || 'n/a' }));
+}
+
+// ─── PLATFORM HEALTH TABLE ──────────────────────────────────────────
+const platformColumns = [
+  { key: 'name', label: 'Platform Name', tip: 'The name of the live production platform.' },
+  { key: 'status', label: 'Status', tip: 'Overall platform health based on constituent app statuses and canary results.' },
+  { key: 'lastRun', label: 'Last Test Run', tip: 'Timestamp of the most recent platform-level test.' },
+  { key: 'uptime', label: 'Uptime', tip: 'Rolling 30-day platform availability from synthetic monitoring.' },
+  { key: 'foundryCanary', label: 'Foundry Canary', tip: 'Foundry-managed canary test status. Runs automated end-to-end validation.' },
+  { key: 'accountCanary', label: 'Account Canary', tip: 'Customer-account-level canary test status. Validates per-tenant health.' },
+  { key: 'redApps', label: 'Critical Apps', tip: 'Count of constituent apps currently in red/critical status.' },
+  { key: 'yellowApps', label: 'Warning Apps', tip: 'Count of constituent apps currently in yellow/warning status.' },
+];
+
+function getFilteredPlatforms() {
+  let data = [...platforms[currentPlatformSubtab]];
+  if (searchQuery) {
+    data = data.filter(p => {
+      const hay = [p.name, p.status, p.apps.join(' ')].join(' ').toLowerCase();
+      return hay.includes(searchQuery);
+    });
+  }
+  const col = platformSortCol;
+  data.sort((a, b) => {
+    let va, vb;
+    if (col === 'status') { va = statusOrder[a.status] ?? 5; vb = statusOrder[b.status] ?? 5; }
+    else if (col === 'uptime' || col === 'redApps' || col === 'yellowApps') { va = +a[col]; vb = +b[col]; }
+    else if (col === 'foundryCanary' || col === 'accountCanary') {
+      const so = { pass: 0, fail: 1, 'n/a': 2 };
+      va = so[a[col].status] ?? 3; vb = so[b[col].status] ?? 3;
+    }
+    else { va = String(a[col] || '').toLowerCase(); vb = String(b[col] || '').toLowerCase(); }
+    if (va < vb) return platformSortDir === 'asc' ? -1 : 1;
+    if (va > vb) return platformSortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+  return data;
+}
+
+function renderPlatformTab() {
+  const data = getFilteredPlatforms();
+  const green = data.filter(p => p.status === 'green').length;
+  const yellow = data.filter(p => p.status === 'yellow').length;
+  const red = data.filter(p => p.status === 'red').length;
+
+  document.getElementById('platformSummaryBar').innerHTML = [
+    summaryCard('Total Platforms', data.length, '#6366f1', 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4'),
+    summaryCard('Healthy', green, '#10b981', 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'),
+    summaryCard('Warning', yellow, '#f59e0b', 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z'),
+    summaryCard('Critical', red, '#ef4444', 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z'),
+  ].join('');
+
+  const arrow = (col) => {
+    if (platformSortCol !== col) return '<span class="sort-arrow ml-1">\u2195</span>';
+    return platformSortDir === 'asc'
+      ? '<span class="sort-arrow active ml-1">\u2191</span>'
+      : '<span class="sort-arrow active ml-1">\u2193</span>';
+  };
+
+  document.getElementById('platformHealthThead').innerHTML = '<tr>' + platformColumns.map(c =>
+    `<th class="sortable px-3 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider bg-card border-b border-border whitespace-nowrap" onclick="sortPlatformCol('${c.key}')">
+      <span class="inline-flex items-center">${c.label}${tip(c.tip)}${arrow(c.key)}</span>
+    </th>`
+  ).join('') + '</tr>';
+
+  document.getElementById('platformHealthTbody').innerHTML = data.map(p => `
+    <tr class="data-row border-b border-border/50 transition-colors cursor-pointer" onclick="openPlatformModal('${p.name}')">
+      <td class="px-3 py-2.5 whitespace-nowrap"><span class="text-accent hover:text-indigo-300 font-medium">${p.name}</span></td>
+      <td class="px-3 py-2.5 whitespace-nowrap">${statusBadge(p.status)}</td>
+      <td class="px-3 py-2.5 whitespace-nowrap text-slate-400 text-xs">${p.lastRun}</td>
+      <td class="px-3 py-2.5 whitespace-nowrap"><span class="${uptimeColor(p.uptime)} font-medium">${p.uptime.toFixed(1)}%</span></td>
+      <td class="px-3 py-2.5 whitespace-nowrap">${canaryBadge(p.foundryCanary.status, p.foundryCanary.lastRan)}</td>
+      <td class="px-3 py-2.5 whitespace-nowrap">${canaryBadge(p.accountCanary.status, p.accountCanary.lastRan)}</td>
+      <td class="px-3 py-2.5 whitespace-nowrap text-center"><span class="${p.redApps > 0 ? 'text-red-400 font-semibold' : 'text-slate-500'}">${p.redApps}</span></td>
+      <td class="px-3 py-2.5 whitespace-nowrap text-center"><span class="${p.yellowApps > 0 ? 'text-yellow-400 font-semibold' : 'text-slate-500'}">${p.yellowApps}</span></td>
+    </tr>
+  `).join('');
+}
+
+function sortPlatformCol(col) {
+  if (platformSortCol === col) platformSortDir = platformSortDir === 'asc' ? 'desc' : 'asc';
+  else { platformSortCol = col; platformSortDir = 'asc'; }
+  renderPlatformTab();
+}
+
+// ─── PLATFORM DETAIL MODAL ──────────────────────────────────────────
+function openPlatformModal(name) {
+  const allPlats = [...platforms.supported, ...platforms.nonSupported];
+  const plat = allPlats.find(p => p.name === name);
+  if (!plat) return;
+  document.getElementById('platformModalTitle').textContent = plat.name;
+  const appDetails = plat.apps.map(appName => {
+    const found = apps.find(a => a.name === appName);
+    if (found) return found;
+    return { name: appName, status: 'yellow', uptime: 0, type: 'N/A', ci: '', seeding: '', workflow: '', performance: '', lastRun: 'N/A' };
+  });
+  document.getElementById('platformModalContent').innerHTML = `
+    <div class="mb-4 grid grid-cols-3 gap-3">
+      <div class="bg-surface rounded-lg border border-border p-3">
+        <div class="text-xs text-slate-500">Platform Status</div>
+        <div class="mt-1">${statusBadge(plat.status)}</div>
+      </div>
+      <div class="bg-surface rounded-lg border border-border p-3">
+        <div class="text-xs text-slate-500">Uptime</div>
+        <div class="mt-1 text-lg font-semibold ${uptimeColor(plat.uptime)}">${plat.uptime.toFixed(1)}%</div>
+      </div>
+      <div class="bg-surface rounded-lg border border-border p-3">
+        <div class="text-xs text-slate-500">Last Test Run</div>
+        <div class="mt-1 text-sm text-white">${plat.lastRun}</div>
+      </div>
+    </div>
+    <h4 class="text-sm font-semibold text-white mb-3">Constituent Apps (${appDetails.length})</h4>
+    <div class="space-y-2">
+      ${appDetails.map(a => `
+        <div class="flex items-center justify-between bg-surface rounded-lg border border-border px-4 py-2.5">
+          <div class="flex items-center gap-3">
+            ${statusBadge(a.status)}
+            <span class="text-sm font-medium text-white">${a.name}</span>
+            <span class="text-xs text-slate-500">${a.type}</span>
+          </div>
+          <div class="flex items-center gap-4 text-xs">
+            <span class="${uptimeColor(a.uptime)}">${a.uptime > 0 ? a.uptime.toFixed(1) + '%' : '--'}</span>
+            <div class="flex gap-1">${subStatusBadge(a.ci)}${subStatusBadge(a.seeding)}${subStatusBadge(a.workflow)}${subStatusBadge(a.performance)}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  document.getElementById('platformModal').classList.add('open');
+}
+
+function closePlatformModal() {
+  document.getElementById('platformModal').classList.remove('open');
+}
+
+// ─── APP FOUNDRY TAB ─────────────────────────────────────────────────
+let chartsInitialized = false;
+let stackedChart, lineChartObj, donutChartObj;
+
+function renderFoundryTab() {
+  const active = apps.filter(a => a.status !== 'deprecated');
+  const supported = active; // All non-deprecated for metrics
+  const avgAppUptime = (supported.reduce((s, a) => s + a.uptime, 0) / supported.length).toFixed(1);
+  const supportedPlats = platforms.supported;
+  const avgPlatUptime = (supportedPlats.reduce((s, p) => s + p.uptime, 0) / supportedPlats.length).toFixed(1);
+
+  // Week-ago simulated data
+  const avgAppUptimeWeekAgo = (parseFloat(avgAppUptime) - 0.3).toFixed(1);
+  const avgPlatUptimeWeekAgo = (parseFloat(avgPlatUptime) - 0.5).toFixed(1);
+
+  document.getElementById('foundryUptimeCards').innerHTML = `
+    <div class="bg-card border border-border rounded-xl p-5">
+      <div class="text-xs text-slate-500 mb-1">Average App Uptime (Supported)</div>
+      <div class="flex items-end gap-3">
+        <span class="text-4xl font-bold ${parseFloat(avgAppUptime) >= 95 ? 'text-emerald-400' : 'text-yellow-400'}">${avgAppUptime}%</span>
+        <span class="text-sm text-emerald-400 mb-1 flex items-center gap-1">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+          +${(parseFloat(avgAppUptime) - parseFloat(avgAppUptimeWeekAgo)).toFixed(1)}% vs 7d ago
+        </span>
+      </div>
+    </div>
+    <div class="bg-card border border-border rounded-xl p-5">
+      <div class="text-xs text-slate-500 mb-1">Average Platform Uptime (Supported)</div>
+      <div class="flex items-end gap-3">
+        <span class="text-4xl font-bold ${parseFloat(avgPlatUptime) >= 95 ? 'text-emerald-400' : 'text-yellow-400'}">${avgPlatUptime}%</span>
+        <span class="text-sm text-emerald-400 mb-1 flex items-center gap-1">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+          +${(parseFloat(avgPlatUptime) - parseFloat(avgPlatUptimeWeekAgo)).toFixed(1)}% vs 7d ago
+        </span>
+      </div>
+    </div>
+  `;
+
+  // Coverage metrics
+  const ciGreen = active.filter(a => a.ci === 'green').length;
+  const ciPct = ((ciGreen / active.length) * 100).toFixed(0);
+  const seedGreen = active.filter(a => a.seeding === 'green').length;
+  const seedPct = ((seedGreen / active.length) * 100).toFixed(0);
+  const wfGreen = active.filter(a => a.workflow === 'green').length;
+  const wfPct = ((wfGreen / active.length) * 100).toFixed(0);
+  const perfGreen = active.filter(a => a.performance === 'green').length;
+  const perfPct = ((perfGreen / active.length) * 100).toFixed(0);
+
+  // Sub-metrics
+  const pspPass = active.filter(a => a.psp === 'pass').length;
+  const platPass = active.filter(a => a.platform === 'pass').length;
+  const e2ePass = active.filter(a => a.e2e === 'pass').length;
+  const docPresent = active.filter(a => a.seedDoc).length;
+  const passRateGood = active.filter(a => a.seedPassRate >= 85).length;
+  const synthGood = active.filter(a => a.synthSupport).length;
+  const popGood = active.filter(a => a.populateDuration <= 2).length;
+  const snapDurGood = active.filter(a => a.snapshotDuration <= 1.5).length;
+  const snapSizeGood = active.filter(a => a.snapshotSize <= 100).length;
+
+  // Period-over-period (simulated 7d ago deltas)
+  const deltas = { ci: +2, seed: +1, wf: +3, perf: +1 };
+
+  function coverageCard(label, green, total, pct, delta, subItems) {
+    const subHtml = subItems.map(si => `
+      <div class="flex items-center justify-between text-xs mt-1.5">
+        <span class="text-slate-500">${si.label}</span>
+        <span class="text-slate-300">${si.count}/${total} <span class="text-slate-500">(${((si.count/total)*100).toFixed(0)}%)</span></span>
+      </div>
+    `).join('');
+    const deltaSign = delta >= 0 ? '+' : '';
+    const deltaColor = delta >= 0 ? 'text-emerald-400' : 'text-red-400';
+    return `
+      <div class="bg-surface rounded-lg border border-border p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-sm font-medium text-white">${label}</span>
+          <span class="${deltaColor} text-xs font-medium">${deltaSign}${delta} vs 7d</span>
+        </div>
+        <div class="flex items-end gap-2 mb-2">
+          <span class="text-2xl font-bold text-white">${green}</span>
+          <span class="text-sm text-slate-500 mb-0.5">/ ${total}</span>
+          <span class="text-sm ${parseInt(pct) >= 70 ? 'text-emerald-400' : parseInt(pct) >= 50 ? 'text-yellow-400' : 'text-red-400'} font-medium mb-0.5">(${pct}%)</span>
+        </div>
+        <div class="w-full bg-slate-800 rounded-full h-1.5 mb-2">
+          <div class="h-1.5 rounded-full ${parseInt(pct) >= 70 ? 'bg-emerald-500' : parseInt(pct) >= 50 ? 'bg-yellow-500' : 'bg-red-500'}" style="width:${pct}%"></div>
+        </div>
+        ${subHtml}
+      </div>
+    `;
+  }
+
+  document.getElementById('coverageGrid').innerHTML = [
+    coverageCard('CI Tests', ciGreen, active.length, ciPct, deltas.ci, [
+      { label: 'PSP Tests', count: pspPass },
+      { label: 'Platform Tests', count: platPass },
+      { label: 'E2E Tests', count: e2ePass },
+    ]),
+    coverageCard('Operational Seeding', seedGreen, active.length, seedPct, deltas.seed, [
+      { label: 'Documentation', count: docPresent },
+      { label: 'Prompt Pass Rate (\u226585%)', count: passRateGood },
+      { label: 'Synthetic Pipelines', count: synthGood },
+    ]),
+    coverageCard('Workflow Coverage', wfGreen, active.length, wfPct, deltas.wf, [
+      { label: 'All workflows passing', count: wfGreen },
+    ]),
+    coverageCard('Performance', perfGreen, active.length, perfPct, deltas.perf, [
+      { label: 'Populate Hook (\u22642s)', count: popGood },
+      { label: 'Snapshot Dur. (\u22641.5s)', count: snapDurGood },
+      { label: 'Snapshot Size (\u2264100MB)', count: snapSizeGood },
+    ]),
+  ].join('');
+
+  // Charts
+  renderCharts(active);
+}
+
+function renderCharts(active) {
+  const greenCount = active.filter(a => a.status === 'green').length;
+  const yellowCount = active.filter(a => a.status === 'yellow').length;
+  const redCount = active.filter(a => a.status === 'red').length;
+
+  const ciG = active.filter(a => a.ci === 'green').length;
+  const ciY = active.filter(a => a.ci === 'yellow').length;
+  const ciR = active.filter(a => a.ci === 'red').length;
+  const sG = active.filter(a => a.seeding === 'green').length;
+  const sY = active.filter(a => a.seeding === 'yellow').length;
+  const sR = active.filter(a => a.seeding === 'red').length;
+  const wG = active.filter(a => a.workflow === 'green').length;
+  const wY = active.filter(a => a.workflow === 'yellow').length;
+  const wR = active.filter(a => a.workflow === 'red').length;
+  const pG = active.filter(a => a.performance === 'green').length;
+  const pY = active.filter(a => a.performance === 'yellow').length;
+  const pR = active.filter(a => a.performance === 'red').length;
+
+  const chartFont = { family: 'Inter, system-ui, sans-serif' };
+  const gridColor = '#1e2130';
+  const tickColor = '#64748b';
+
+  // Destroy old charts if they exist
+  if (stackedChart) stackedChart.destroy();
+  if (lineChartObj) lineChartObj.destroy();
+  if (donutChartObj) donutChartObj.destroy();
+
+  // Stacked bar
+  stackedChart = new Chart(document.getElementById('stackedBarChart'), {
+    type: 'bar',
+    data: {
+      labels: ['CI', 'Seeding', 'Workflow', 'Performance'],
+      datasets: [
+        { label: 'Green', data: [ciG, sG, wG, pG], backgroundColor: '#10b981', borderRadius: 2 },
+        { label: 'Yellow', data: [ciY, sY, wY, pY], backgroundColor: '#f59e0b', borderRadius: 2 },
+        { label: 'Red', data: [ciR, sR, wR, pR], backgroundColor: '#ef4444', borderRadius: 2 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: tickColor, font: chartFont, boxWidth: 12, padding: 16 } },
+      },
+      scales: {
+        x: { stacked: true, grid: { color: gridColor }, ticks: { color: tickColor, font: chartFont } },
+        y: { stacked: true, grid: { color: gridColor }, ticks: { color: tickColor, font: chartFont } }
+      }
+    }
+  });
+
+  // Line chart - simulated 8-week trend
+  const weeks = ['W-8', 'W-7', 'W-6', 'W-5', 'W-4', 'W-3', 'W-2', 'W-1'];
+  const greenTrend = [16, 17, 18, 19, 19, 20, 21, greenCount];
+  const yellowTrend = [10, 10, 9, 9, 10, 9, 10, yellowCount];
+  const redTrend = [8, 7, 7, 6, 5, 5, 4, redCount];
+
+  lineChartObj = new Chart(document.getElementById('lineChart'), {
+    type: 'line',
+    data: {
+      labels: weeks,
+      datasets: [
+        { label: 'Green', data: greenTrend, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true, tension: 0.3, borderWidth: 2, pointRadius: 3 },
+        { label: 'Yellow', data: yellowTrend, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', fill: true, tension: 0.3, borderWidth: 2, pointRadius: 3 },
+        { label: 'Red', data: redTrend, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', fill: true, tension: 0.3, borderWidth: 2, pointRadius: 3 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: tickColor, font: chartFont, boxWidth: 12, padding: 16 } },
+      },
+      scales: {
+        x: { grid: { color: gridColor }, ticks: { color: tickColor, font: chartFont } },
+        y: { grid: { color: gridColor }, ticks: { color: tickColor, font: chartFont }, beginAtZero: true }
+      }
+    }
+  });
+
+  // Donut chart
+  donutChartObj = new Chart(document.getElementById('donutChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Healthy', 'Warning', 'Critical'],
+      datasets: [{
+        data: [greenCount, yellowCount, redCount],
+        backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+        borderColor: '#1a1d27',
+        borderWidth: 3,
+        hoverOffset: 6,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      cutout: '65%',
+      plugins: {
+        legend: { position: 'bottom', labels: { color: tickColor, font: chartFont, boxWidth: 12, padding: 16 } },
+      }
+    }
   });
 }
 
-// ── Refresh simulation ──
-function refreshData() {
-  document.getElementById('lastUpdated').textContent = 'Last updated: just now';
-}
-
-// ── Chart defaults ──
-Chart.defaults.color = '#64748b';
-Chart.defaults.borderColor = '#2a2d3a';
-Chart.defaults.font.family = 'system-ui, -apple-system, sans-serif';
-Chart.defaults.font.size = 11;
-
-const hours = Array.from({length: 24}, (_, i) => `${String(i).padStart(2,'0')}:00`);
-
-// ── App Health Charts ──
-new Chart(document.getElementById('appLatencyChart'), {
-  type: 'line',
-  data: {
-    labels: hours,
-    datasets: [{
-      label: 'P50',
-      data: [180,175,170,168,165,162,160,165,172,185,195,200,198,192,188,185,190,195,192,188,185,182,180,178],
-      borderColor: '#6366f1',
-      backgroundColor: 'rgba(99,102,241,0.1)',
-      fill: true,
-      tension: 0.3,
-      borderWidth: 2,
-      pointRadius: 0,
-    },{
-      label: 'P99',
-      data: [420,410,395,388,380,375,370,385,410,450,480,495,488,470,455,445,460,475,465,450,440,430,420,415],
-      borderColor: '#f59e0b',
-      borderWidth: 2,
-      tension: 0.3,
-      pointRadius: 0,
-      borderDash: [4, 2],
-    }]
-  },
-  options: {
-    responsive: true,
-    plugins: { legend: { position: 'top', labels: { boxWidth: 12 } } },
-    scales: {
-      y: { beginAtZero: false, title: { display: true, text: 'ms' }, grid: { color: '#1e2130' } },
-      x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } }
-    }
-  }
+// ─── INIT ────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  renderAppHealthTab();
 });
 
-new Chart(document.getElementById('appErrorChart'), {
-  type: 'bar',
-  data: {
-    labels: hours,
-    datasets: [{
-      label: '4xx',
-      data: [12,8,6,5,4,3,4,7,15,22,25,28,26,24,20,18,22,25,23,20,18,15,14,13],
-      backgroundColor: '#f59e0b',
-      borderRadius: 2,
-    },{
-      label: '5xx',
-      data: [1,0,0,0,0,0,0,1,2,3,4,5,3,2,1,1,2,3,2,1,1,0,1,0],
-      backgroundColor: '#ef4444',
-      borderRadius: 2,
-    }]
-  },
-  options: {
-    responsive: true,
-    plugins: { legend: { position: 'top', labels: { boxWidth: 12 } } },
-    scales: {
-      y: { beginAtZero: true, stacked: true, title: { display: true, text: 'errors' }, grid: { color: '#1e2130' } },
-      x: { stacked: true, grid: { display: false }, ticks: { maxTicksLimit: 8 } }
-    }
+// Close modals on Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeModal();
+    closePlatformModal();
   }
 });
-
-// ── Platform Charts ──
-new Chart(document.getElementById('platformThroughputChart'), {
-  type: 'line',
-  data: {
-    labels: hours,
-    datasets: [{
-      label: 'Requests/sec',
-      data: [850,720,580,420,350,310,340,520,780,1100,1350,1480,1520,1490,1420,1380,1450,1500,1460,1380,1250,1100,980,900],
-      borderColor: '#6366f1',
-      backgroundColor: 'rgba(99,102,241,0.1)',
-      fill: true,
-      tension: 0.4,
-      borderWidth: 2,
-      pointRadius: 0,
-    }]
-  },
-  options: {
-    responsive: true,
-    plugins: { legend: { display: false } },
-    scales: {
-      y: { beginAtZero: true, title: { display: true, text: 'req/s' }, grid: { color: '#1e2130' } },
-      x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } }
-    }
-  }
-});
-
-new Chart(document.getElementById('platformQueueChart'), {
-  type: 'line',
-  data: {
-    labels: hours,
-    datasets: [{
-      label: 'Queue Depth',
-      data: [200,150,100,80,60,50,55,120,300,650,900,1100,1247,1200,1050,900,980,1100,1050,950,800,600,400,280],
-      borderColor: '#f59e0b',
-      backgroundColor: 'rgba(245,158,11,0.1)',
-      fill: true,
-      tension: 0.4,
-      borderWidth: 2,
-      pointRadius: 0,
-    }]
-  },
-  options: {
-    responsive: true,
-    plugins: { legend: { display: false } },
-    scales: {
-      y: { beginAtZero: true, title: { display: true, text: 'items' }, grid: { color: '#1e2130' } },
-      x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } }
-    }
-  }
-});
-
-// ── Foundry Charts ──
-new Chart(document.getElementById('foundrySkillsChart'), {
-  type: 'line',
-  data: {
-    labels: ['W1','W2','W3','W4','W5','W6','W7','W8'],
-    datasets: [{
-      label: 'Cumulative Skills',
-      data: [18, 20, 22, 24, 27, 29, 31, 34],
-      borderColor: '#6366f1',
-      backgroundColor: 'rgba(99,102,241,0.1)',
-      fill: true,
-      tension: 0.3,
-      borderWidth: 2,
-    }]
-  },
-  options: {
-    responsive: true,
-    plugins: { legend: { display: false } },
-    scales: {
-      y: { beginAtZero: false, title: { display: true, text: 'skills' }, grid: { color: '#1e2130' } },
-      x: { grid: { display: false } }
-    }
-  }
-});
-
-new Chart(document.getElementById('foundryTaskChart'), {
-  type: 'doughnut',
-  data: {
-    labels: ['Completed', 'In Progress', 'Failed', 'Queued'],
-    datasets: [{
-      data: [142, 23, 7, 15],
-      backgroundColor: ['#10b981', '#6366f1', '#ef4444', '#64748b'],
-      borderColor: '#1a1d27',
-      borderWidth: 3,
-    }]
-  },
-  options: {
-    responsive: true,
-    plugins: {
-      legend: { position: 'right', labels: { boxWidth: 12, padding: 16 } }
-    },
-    cutout: '65%',
-  }
-});
-
-// ── Table data ──
-const endpoints = [
-  { name: '/api/v1/users', status: 'healthy', latency: '145ms', error: '0.08%', rpm: '2,340' },
-  { name: '/api/v1/search', status: 'healthy', latency: '312ms', error: '0.15%', rpm: '1,870' },
-  { name: '/api/v1/skills', status: 'degraded', latency: '520ms', error: '1.20%', rpm: '980' },
-  { name: '/api/v1/agents', status: 'healthy', latency: '198ms', error: '0.05%', rpm: '1,450' },
-  { name: '/api/v1/auth', status: 'healthy', latency: '89ms', error: '0.02%', rpm: '3,200' },
-];
-
-const statusBadge = (s) => {
-  const colors = { healthy: 'bg-emerald-400/10 text-emerald-400', degraded: 'bg-amber-400/10 text-amber-400', down: 'bg-red-400/10 text-red-400' };
-  return `<span class="px-2 py-0.5 rounded-full text-xs font-medium ${colors[s]}">${s}</span>`;
-};
-
-document.getElementById('endpointTable').innerHTML = endpoints.map(e => `
-  <tr class="border-b border-border/50 hover:bg-border/20">
-    <td class="py-3 font-mono text-xs text-slate-300">${e.name}</td>
-    <td class="py-3">${statusBadge(e.status)}</td>
-    <td class="py-3">${e.latency}</td>
-    <td class="py-3">${e.error}</td>
-    <td class="py-3">${e.rpm}</td>
-  </tr>
-`).join('');
-
-const services = [
-  { name: 'api-gateway', status: 'healthy', instances: '4/4', cpu: '58%', mem: '62%', deploy: '2h ago' },
-  { name: 'worker-pool', status: 'healthy', instances: '8/8', cpu: '71%', mem: '68%', deploy: '6h ago' },
-  { name: 'scheduler', status: 'degraded', instances: '2/3', cpu: '82%', mem: '79%', deploy: '1d ago' },
-  { name: 'postgres-primary', status: 'healthy', instances: '1/1', cpu: '45%', mem: '73%', deploy: '5d ago' },
-  { name: 'redis-cluster', status: 'healthy', instances: '3/3', cpu: '22%', mem: '54%', deploy: '3d ago' },
-  { name: 'kafka-broker', status: 'healthy', instances: '3/3', cpu: '38%', mem: '61%', deploy: '2d ago' },
-];
-
-document.getElementById('serviceTable').innerHTML = services.map(s => `
-  <tr class="border-b border-border/50 hover:bg-border/20">
-    <td class="py-3 font-mono text-xs text-slate-300">${s.name}</td>
-    <td class="py-3">${statusBadge(s.status)}</td>
-    <td class="py-3">${s.instances}</td>
-    <td class="py-3">${s.cpu}</td>
-    <td class="py-3">${s.mem}</td>
-    <td class="py-3 text-slate-500">${s.deploy}</td>
-  </tr>
-`).join('');
-
-const skills = [
-  { name: 'foundry-app-mapper', status: 'healthy', version: 'v1.3.0', invocations: '1,247', duration: '3.2s', deployed: '3h ago' },
-  { name: 'email-seed', status: 'healthy', version: 'v2.1.0', invocations: '892', duration: '1.8s', deployed: '1d ago' },
-  { name: 'interview-prep', status: 'healthy', version: 'v1.0.4', invocations: '156', duration: '12.4s', deployed: '2d ago' },
-  { name: 'exec-updates', status: 'degraded', version: 'v0.9.1', invocations: '43', duration: '8.7s', deployed: '4d ago' },
-  { name: 'live-notes', status: 'healthy', version: 'v1.2.0', invocations: '234', duration: '5.1s', deployed: '5d ago' },
-  { name: 'my-todos', status: 'healthy', version: 'v1.1.2', invocations: '567', duration: '4.3s', deployed: '6d ago' },
-];
-
-document.getElementById('skillTable').innerHTML = skills.map(s => `
-  <tr class="border-b border-border/50 hover:bg-border/20">
-    <td class="py-3 font-mono text-xs text-slate-300">${s.name}</td>
-    <td class="py-3">${statusBadge(s.status)}</td>
-    <td class="py-3 font-mono text-xs">${s.version}</td>
-    <td class="py-3">${s.invocations}</td>
-    <td class="py-3">${s.duration}</td>
-    <td class="py-3 text-slate-500">${s.deployed}</td>
-  </tr>
-`).join('');
 </script>
 </body>
 </html>
