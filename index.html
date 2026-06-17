@@ -318,6 +318,28 @@ function uptimeColor(v) {
   return 'text-slate-600';
 }
 
+// Simulate rolling avg 1-7d vs 8-14d uptime delta per app
+function uptimeDelta(a) {
+  const seed = a.name.length * 7 % 13;
+  let delta;
+  if (a.uptime >= 99) delta = +(0.1 + (seed % 4) * 0.05).toFixed(2);
+  else if (a.uptime >= 95) delta = +([-0.3, 0.2, -0.1, 0.4, 0.1, -0.2, 0.3][seed % 7]).toFixed(1);
+  else delta = +([-0.8, -0.5, 0.3, -1.2, 0.2, -0.6, -0.3][seed % 7]).toFixed(1);
+  const sign = delta >= 0 ? '+' : '';
+  return `${sign}${delta}%`;
+}
+
+// Simulate rolling avg uptime delta for platforms
+function platUptimeDelta(p) {
+  const seed = p.name.length * 3 % 7;
+  let delta;
+  if (p.uptime >= 98) delta = +(0.2 + (seed % 3) * 0.1).toFixed(1);
+  else if (p.uptime >= 94) delta = +([-0.4, 0.3, -0.2, 0.5, 0.1, -0.3, 0.2][seed]).toFixed(1);
+  else delta = +([-1.0, -0.6, 0.4, -0.8][seed % 4]).toFixed(1);
+  const sign = delta >= 0 ? '+' : '';
+  return `${sign}${delta}%`;
+}
+
 function canaryBadge(status, lastRan) {
   const cls = status === 'pass' ? 'badge-green' : status === 'fail' ? 'badge-red' : 'badge-gray';
   const label = status === 'pass' ? 'Pass' : status === 'fail' ? 'Fail' : 'N/A';
@@ -469,7 +491,7 @@ function renderAppHealthTab() {
       <td class="px-3 py-2.5 whitespace-nowrap"><button class="text-accent hover:text-indigo-300 font-medium transition-colors text-left" onclick="openAppModal('${a.name}')">${a.name}</button></td>
       <td class="px-3 py-2.5 whitespace-nowrap">${statusBadge(a.status)}</td>
       <td class="px-3 py-2.5 whitespace-nowrap text-slate-400 text-xs">${a.lastRun}</td>
-      <td class="px-3 py-2.5 whitespace-nowrap"><span class="${uptimeColor(a.uptime)} font-medium">${a.uptime > 0 ? a.uptime.toFixed(1) + '%' : '--'}</span></td>
+      <td class="px-3 py-2.5 whitespace-nowrap">${a.uptime > 0 ? `<span class="${uptimeColor(a.uptime)} font-medium">${a.uptime.toFixed(1)}%</span><span class="text-xs ml-1 ${a.uptime >= 95 ? 'text-emerald-500' : 'text-red-400'}">${uptimeDelta(a)}</span>` : '<span class="text-slate-500">--</span>'}</td>
       <td class="px-3 py-2.5 whitespace-nowrap"><span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300">${a.type}</span></td>
       <td class="px-3 py-2.5 whitespace-nowrap text-slate-400">${a.domain}</td>
       <td class="px-3 py-2.5 whitespace-nowrap text-slate-400">${a.owner}</td>
@@ -614,6 +636,8 @@ function renderModalContent() {
     `;
   } else {
     // App Metadata tab
+    const schema = generateSchema(a);
+    const csv = generateSampleCSV(a);
     el.innerHTML = `
       <div class="space-y-4">
         <div class="grid grid-cols-2 gap-4">
@@ -645,6 +669,46 @@ function renderModalContent() {
             <div class="flex justify-between"><span class="text-slate-400">Uptime (30d)</span><span class="${uptimeColor(a.uptime)}">${a.uptime > 0 ? a.uptime.toFixed(1) + '%' : 'N/A'}</span></div>
           </div>
         </div>
+
+        <!-- Schema Documentation -->
+        <div class="bg-surface rounded-lg border border-border p-4">
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-xs text-slate-500 uppercase tracking-wide font-semibold">Schema Documentation</div>
+            <span class="text-xs ${a.seedDoc ? 'text-emerald-400' : 'text-red-400'}">${a.seedDoc ? 'Available' : 'Not documented'}</span>
+          </div>
+          <p class="text-xs text-slate-400 mb-3">Required fields and data types for CSV/JSON ingestion into ${a.name}.</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="border-b border-border text-slate-500">
+                  <th class="text-left py-1.5 pr-3 font-medium">Field</th>
+                  <th class="text-left py-1.5 pr-3 font-medium">Type</th>
+                  <th class="text-left py-1.5 pr-3 font-medium">Required</th>
+                  <th class="text-left py-1.5 font-medium">Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${schema.map(f => `
+                  <tr class="border-b border-border/30">
+                    <td class="py-1.5 pr-3 font-mono text-indigo-300">${f.field}</td>
+                    <td class="py-1.5 pr-3 text-slate-300">${f.type}</td>
+                    <td class="py-1.5 pr-3 ${f.required ? 'text-amber-400' : 'text-slate-500'}">${f.required ? 'Yes' : 'No'}</td>
+                    <td class="py-1.5 text-slate-400">${f.desc}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Sample CSV -->
+        <div class="bg-surface rounded-lg border border-border p-4">
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-xs text-slate-500 uppercase tracking-wide font-semibold">Sample CSV</div>
+            <button onclick="navigator.clipboard.writeText(document.getElementById('csvBlock').textContent)" class="text-xs text-accent hover:text-indigo-300 transition-colors">Copy to clipboard</button>
+          </div>
+          <pre id="csvBlock" class="bg-card border border-border rounded-lg p-3 text-xs font-mono text-slate-300 overflow-x-auto whitespace-pre leading-relaxed">${csv}</pre>
+        </div>
       </div>
     `;
   }
@@ -675,6 +739,167 @@ function generateWorkflows(a) {
     return i === 0 ? 'fail' : 'pass';
   });
   return wfs.map((name, i) => ({ name, status: statusValues[i] || 'n/a' }));
+}
+
+function generateSchema(a) {
+  const schemas = {
+    'Data Science': [
+      { field: 'query_id', type: 'string', required: true, desc: 'Unique query identifier' },
+      { field: 'query_text', type: 'string', required: true, desc: 'SQL or analysis query body' },
+      { field: 'data_source', type: 'string', required: true, desc: 'Target datasource name' },
+      { field: 'created_at', type: 'datetime', required: true, desc: 'ISO 8601 timestamp' },
+      { field: 'owner_email', type: 'string', required: false, desc: 'Email of query owner' },
+      { field: 'tags', type: 'string[]', required: false, desc: 'Comma-separated labels' },
+    ],
+    'Finance': [
+      { field: 'transaction_id', type: 'string', required: true, desc: 'Unique transaction reference' },
+      { field: 'account_name', type: 'string', required: true, desc: 'Account or entity name' },
+      { field: 'amount', type: 'decimal', required: true, desc: 'Transaction amount (2 decimal)' },
+      { field: 'currency', type: 'string', required: true, desc: 'ISO 4217 currency code' },
+      { field: 'date', type: 'date', required: true, desc: 'YYYY-MM-DD transaction date' },
+      { field: 'category', type: 'string', required: false, desc: 'Revenue, Expense, Transfer, etc.' },
+      { field: 'memo', type: 'string', required: false, desc: 'Free-text description' },
+    ],
+    'Healthcare': [
+      { field: 'patient_id', type: 'string', required: true, desc: 'Unique patient identifier' },
+      { field: 'first_name', type: 'string', required: true, desc: 'Patient first name' },
+      { field: 'last_name', type: 'string', required: true, desc: 'Patient last name' },
+      { field: 'dob', type: 'date', required: true, desc: 'Date of birth (YYYY-MM-DD)' },
+      { field: 'diagnosis_code', type: 'string', required: false, desc: 'ICD-10 code' },
+      { field: 'provider_name', type: 'string', required: false, desc: 'Treating provider' },
+      { field: 'visit_date', type: 'date', required: true, desc: 'Date of visit' },
+    ],
+    'Workspace': [
+      { field: 'item_id', type: 'string', required: true, desc: 'Unique item identifier' },
+      { field: 'title', type: 'string', required: true, desc: 'Item title or subject' },
+      { field: 'body', type: 'text', required: false, desc: 'Content body (markdown or plain)' },
+      { field: 'author', type: 'string', required: true, desc: 'Author email or username' },
+      { field: 'created_at', type: 'datetime', required: true, desc: 'ISO 8601 timestamp' },
+      { field: 'folder', type: 'string', required: false, desc: 'Parent folder or channel' },
+    ],
+    'Education': [
+      { field: 'student_id', type: 'string', required: true, desc: 'Unique student identifier' },
+      { field: 'course_code', type: 'string', required: true, desc: 'Course or section code' },
+      { field: 'enrollment_date', type: 'date', required: true, desc: 'YYYY-MM-DD enrollment' },
+      { field: 'grade', type: 'string', required: false, desc: 'Letter or numeric grade' },
+      { field: 'instructor', type: 'string', required: false, desc: 'Instructor name or ID' },
+      { field: 'status', type: 'enum', required: true, desc: 'active, completed, withdrawn' },
+    ],
+    'ERP': [
+      { field: 'order_id', type: 'string', required: true, desc: 'Unique order reference' },
+      { field: 'customer_name', type: 'string', required: true, desc: 'Customer or vendor' },
+      { field: 'item_code', type: 'string', required: true, desc: 'Product/service code' },
+      { field: 'quantity', type: 'integer', required: true, desc: 'Order quantity' },
+      { field: 'unit_price', type: 'decimal', required: true, desc: 'Price per unit' },
+      { field: 'order_date', type: 'date', required: true, desc: 'YYYY-MM-DD order date' },
+      { field: 'status', type: 'enum', required: true, desc: 'draft, confirmed, shipped, invoiced' },
+    ],
+    'Legal': [
+      { field: 'document_id', type: 'string', required: true, desc: 'Unique document reference' },
+      { field: 'title', type: 'string', required: true, desc: 'Document title' },
+      { field: 'document_type', type: 'enum', required: true, desc: 'contract, filing, brief, policy' },
+      { field: 'client_name', type: 'string', required: false, desc: 'Associated client or party' },
+      { field: 'date_filed', type: 'date', required: true, desc: 'YYYY-MM-DD filing date' },
+      { field: 'jurisdiction', type: 'string', required: false, desc: 'Jurisdiction or venue' },
+    ],
+    'Commerce': [
+      { field: 'customer_id', type: 'string', required: true, desc: 'Unique customer identifier' },
+      { field: 'email', type: 'string', required: true, desc: 'Customer email address' },
+      { field: 'name', type: 'string', required: true, desc: 'Customer display name' },
+      { field: 'channel', type: 'enum', required: false, desc: 'web, email, chat, phone' },
+      { field: 'created_at', type: 'datetime', required: true, desc: 'Account creation timestamp' },
+      { field: 'lifetime_value', type: 'decimal', required: false, desc: 'Total spend in USD' },
+    ],
+    'Analytics': [
+      { field: 'metric_name', type: 'string', required: true, desc: 'Metric identifier' },
+      { field: 'value', type: 'decimal', required: true, desc: 'Metric value' },
+      { field: 'timestamp', type: 'datetime', required: true, desc: 'ISO 8601 measurement time' },
+      { field: 'source', type: 'string', required: true, desc: 'Data source name' },
+      { field: 'dimensions', type: 'json', required: false, desc: 'Key-value dimension pairs' },
+      { field: 'unit', type: 'string', required: false, desc: 'Unit of measurement' },
+    ],
+    'Engineering': [
+      { field: 'sample_id', type: 'string', required: true, desc: 'Unique sample or batch ID' },
+      { field: 'test_type', type: 'string', required: true, desc: 'Test protocol name' },
+      { field: 'result', type: 'decimal', required: true, desc: 'Measured result value' },
+      { field: 'unit', type: 'string', required: true, desc: 'Unit of measurement' },
+      { field: 'operator', type: 'string', required: false, desc: 'Technician or operator name' },
+      { field: 'date', type: 'date', required: true, desc: 'YYYY-MM-DD test date' },
+    ],
+    'General': [
+      { field: 'id', type: 'string', required: true, desc: 'Unique record identifier' },
+      { field: 'input', type: 'text', required: true, desc: 'Input data or query' },
+      { field: 'output', type: 'text', required: false, desc: 'Expected output or result' },
+      { field: 'timestamp', type: 'datetime', required: true, desc: 'ISO 8601 execution time' },
+    ],
+  };
+  return schemas[a.domain] || schemas['General'];
+}
+
+function generateSampleCSV(a) {
+  const csvData = {
+    'Data Science': `query_id,query_text,data_source,created_at,owner_email,tags
+QRY-001,"SELECT SUM(revenue) FROM sales WHERE region='West'",sales_db,2026-06-15T09:30:00Z,analyst@company.com,"revenue,west"
+QRY-002,"SELECT product_name, COUNT(*) FROM orders GROUP BY 1",orders_db,2026-06-15T10:15:00Z,ops@company.com,"products,count"
+QRY-003,"SELECT customer_id, SUM(amount) FROM invoices",billing_db,2026-06-15T11:00:00Z,finance@company.com,"billing,summary"`,
+    'Finance': `transaction_id,account_name,amount,currency,date,category,memo
+TXN-10001,Acme Corp,15420.00,USD,2026-06-01,Revenue,Q2 consulting invoice
+TXN-10002,Office Supplies Inc,-342.50,USD,2026-06-03,Expense,Monthly office supplies
+TXN-10003,Westfield Bank,50000.00,USD,2026-06-05,Transfer,Operating account funding
+TXN-10004,CloudHost Ltd,-1899.99,USD,2026-06-07,Expense,AWS infrastructure Jun`,
+    'Healthcare': `patient_id,first_name,last_name,dob,diagnosis_code,provider_name,visit_date
+PAT-001,James,Wilson,1985-03-14,J06.9,Dr. Sarah Chen,2026-06-10
+PAT-002,Maria,Garcia,1972-11-28,E11.9,Dr. Raj Patel,2026-06-11
+PAT-003,Robert,Johnson,1990-07-22,M54.5,Dr. Lisa Wong,2026-06-12
+PAT-004,Emily,Davis,1965-01-30,I10,Dr. Sarah Chen,2026-06-13`,
+    'Workspace': `item_id,title,body,author,created_at,folder
+DOC-001,Q2 Planning Notes,"Revenue targets and key milestones for Q2",josh@team.com,2026-06-01T08:00:00Z,/planning
+DOC-002,API Migration Guide,"Steps to migrate from v2 to v3 endpoints",dev@team.com,2026-06-02T14:30:00Z,/engineering
+MSG-001,Standup Update,"Completed auth flow; blocked on DNS config",neel@team.com,2026-06-03T09:00:00Z,#general`,
+    'Education': `student_id,course_code,enrollment_date,grade,instructor,status
+STU-001,CS-301,2026-01-15,A,Dr. Thompson,completed
+STU-002,BIO-201,2026-01-15,,Dr. Martinez,active
+STU-003,CS-301,2026-01-15,B+,Dr. Thompson,completed
+STU-004,MATH-401,2026-02-01,,Prof. Adams,active`,
+    'ERP': `order_id,customer_name,item_code,quantity,unit_price,order_date,status
+SO-2026-001,Northern Supplies,WIDGET-A,500,12.50,2026-06-01,shipped
+SO-2026-002,Pacific Trading,GADGET-B,200,45.00,2026-06-03,confirmed
+PO-2026-001,Raw Materials Co,STEEL-304,1000,8.75,2026-06-05,draft
+SO-2026-003,Metro Retail,WIDGET-A,750,12.50,2026-06-08,invoiced`,
+    'Legal': `document_id,title,document_type,client_name,date_filed,jurisdiction
+DOC-L001,Service Agreement - Acme,contract,Acme Corp,2026-05-15,Delaware
+DOC-L002,Patent Filing #4821,filing,,2026-06-01,USPTO
+DOC-L003,NDA - Partner Co,contract,Partner Co,2026-06-10,California
+DOC-L004,Compliance Policy v3,policy,,2026-06-12,Federal`,
+    'Commerce': `customer_id,email,name,channel,created_at,lifetime_value
+CUST-001,alice@example.com,Alice Johnson,web,2025-08-15T10:30:00Z,2450.00
+CUST-002,bob@example.com,Bob Smith,email,2025-11-22T14:15:00Z,890.50
+CUST-003,carol@example.com,Carol Williams,chat,2026-01-05T09:00:00Z,3200.00
+CUST-004,dave@example.com,Dave Brown,web,2026-03-18T16:45:00Z,150.00`,
+    'Analytics': `metric_name,value,timestamp,source,dimensions,unit
+api_latency_p50,187.5,2026-06-16T08:00:00Z,api-gateway,"{""region"":""us-west""}",ms
+error_rate,0.12,2026-06-16T08:00:00Z,api-gateway,"{""region"":""us-west""}",percent
+active_users,12400,2026-06-16T08:00:00Z,auth-service,"{""plan"":""pro""}",count
+cpu_utilization,62.3,2026-06-16T08:00:00Z,worker-pool,"{""node"":""worker-1""}",percent`,
+    'Engineering': `sample_id,test_type,result,unit,operator,date
+SAMP-001,Tensile Strength,485.2,MPa,J. Rodriguez,2026-06-10
+SAMP-002,pH Analysis,7.42,pH,K. Patel,2026-06-11
+SAMP-003,Viscosity,12.8,cP,J. Rodriguez,2026-06-12
+SAMP-004,Tensile Strength,491.0,MPa,L. Chen,2026-06-13`,
+    'General': `id,input,output,timestamp
+RUN-001,"print('hello world')","hello world",2026-06-16T08:00:00Z
+RUN-002,"2 + 2","4",2026-06-16T08:01:00Z
+RUN-003,"len([1,2,3])","3",2026-06-16T08:02:00Z`,
+    'Security': `user_id,username,role,auth_method,last_login,status
+USR-001,admin@corp.com,admin,sso,2026-06-16T08:00:00Z,active
+USR-002,dev@corp.com,developer,oauth2,2026-06-15T14:30:00Z,active
+USR-003,readonly@corp.com,viewer,password,2026-06-10T09:00:00Z,inactive`,
+    'Government': `proposal_id,title,category,status,submitted_by,date_submitted
+PROP-001,Park Renovation Plan,infrastructure,open,community_board,2026-06-01
+PROP-002,Bus Route 12 Extension,transit,voting,transit_authority,2026-06-05
+PROP-003,Library Hours Update,public_service,approved,city_council,2026-05-28`,
+  };
+  return csvData[a.domain] || csvData['General'];
 }
 
 // ─── PLATFORM HEALTH TABLE ──────────────────────────────────────────
@@ -745,7 +970,7 @@ function renderPlatformTab() {
       <td class="px-3 py-2.5 whitespace-nowrap"><span class="text-accent hover:text-indigo-300 font-medium">${p.name}</span></td>
       <td class="px-3 py-2.5 whitespace-nowrap">${statusBadge(p.status)}</td>
       <td class="px-3 py-2.5 whitespace-nowrap text-slate-400 text-xs">${p.lastRun}</td>
-      <td class="px-3 py-2.5 whitespace-nowrap"><span class="${uptimeColor(p.uptime)} font-medium">${p.uptime.toFixed(1)}%</span></td>
+      <td class="px-3 py-2.5 whitespace-nowrap"><span class="${uptimeColor(p.uptime)} font-medium">${p.uptime.toFixed(1)}%</span><span class="text-xs ml-1 ${p.uptime >= 95 ? 'text-emerald-500' : 'text-red-400'}">${platUptimeDelta(p)}</span></td>
       <td class="px-3 py-2.5 whitespace-nowrap">${canaryBadge(p.foundryCanary.status, p.foundryCanary.lastRan)}</td>
       <td class="px-3 py-2.5 whitespace-nowrap">${canaryBadge(p.accountCanary.status, p.accountCanary.lastRan)}</td>
       <td class="px-3 py-2.5 whitespace-nowrap text-center"><span class="${p.redApps > 0 ? 'text-red-400 font-semibold' : 'text-slate-500'}">${p.redApps}</span></td>
@@ -787,20 +1012,38 @@ function openPlatformModal(name) {
       </div>
     </div>
     <h4 class="text-sm font-semibold text-white mb-3">Constituent Apps (${appDetails.length})</h4>
-    <div class="space-y-2">
-      ${appDetails.map(a => `
-        <div class="flex items-center justify-between bg-surface rounded-lg border border-border px-4 py-2.5">
-          <div class="flex items-center gap-3">
-            ${statusBadge(a.status)}
-            <span class="text-sm font-medium text-white">${a.name}</span>
-            <span class="text-xs text-slate-500">${a.type}</span>
-          </div>
-          <div class="flex items-center gap-4 text-xs">
-            <span class="${uptimeColor(a.uptime)}">${a.uptime > 0 ? a.uptime.toFixed(1) + '%' : '--'}</span>
-            <div class="flex gap-1">${subStatusBadge(a.ci)}${subStatusBadge(a.seeding)}${subStatusBadge(a.workflow)}${subStatusBadge(a.performance)}</div>
-          </div>
-        </div>
-      `).join('')}
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs">
+        <thead>
+          <tr class="border-b border-border text-slate-500">
+            <th class="text-left py-2 pr-2 font-medium">App</th>
+            <th class="text-left py-2 pr-2 font-medium">Type</th>
+            <th class="text-left py-2 pr-2 font-medium">Uptime</th>
+            <th class="text-center py-2 pr-2 font-medium">CI</th>
+            <th class="text-center py-2 pr-2 font-medium">Seeding</th>
+            <th class="text-center py-2 pr-2 font-medium">Workflow</th>
+            <th class="text-center py-2 font-medium">Perf</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${appDetails.map(a => `
+            <tr class="border-b border-border/30">
+              <td class="py-2 pr-2">
+                <div class="flex items-center gap-2">
+                  ${statusBadge(a.status)}
+                  <span class="font-medium text-white">${a.name}</span>
+                </div>
+              </td>
+              <td class="py-2 pr-2 text-slate-400">${a.type}</td>
+              <td class="py-2 pr-2"><span class="${uptimeColor(a.uptime)} font-medium">${a.uptime > 0 ? a.uptime.toFixed(1) + '%' : '--'}</span></td>
+              <td class="py-2 pr-2 text-center">${subStatusBadge(a.ci)}</td>
+              <td class="py-2 pr-2 text-center">${subStatusBadge(a.seeding)}</td>
+              <td class="py-2 pr-2 text-center">${subStatusBadge(a.workflow)}</td>
+              <td class="py-2 text-center">${subStatusBadge(a.performance)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
     </div>
   `;
   document.getElementById('platformModal').classList.add('open');
@@ -869,23 +1112,35 @@ function renderFoundryTab() {
   const snapDurGood = active.filter(a => a.snapshotDuration <= 1.5).length;
   const snapSizeGood = active.filter(a => a.snapshotSize <= 100).length;
 
-  // Period-over-period (simulated 7d ago deltas)
+  // Period-over-period (simulated 7d ago deltas — absolute count change)
   const deltas = { ci: +2, seed: +1, wf: +3, perf: +1 };
 
   function coverageCard(label, green, total, pct, delta, subItems) {
-    const subHtml = subItems.map(si => `
+    const pctPrev = (((green - delta) / total) * 100).toFixed(0);
+    const pctDelta = (parseFloat(pct) - parseFloat(pctPrev)).toFixed(1);
+    const subHtml = subItems.map(si => {
+      const siPct = ((si.count / total) * 100).toFixed(0);
+      const siPrev = si.count - (si.delta || 0);
+      const siPctPrev = ((siPrev / total) * 100).toFixed(0);
+      const siPctDelta = (parseFloat(siPct) - parseFloat(siPctPrev)).toFixed(1);
+      const siDeltaSign = si.delta >= 0 ? '+' : '';
+      const siDeltaColor = si.delta >= 0 ? 'text-emerald-400' : 'text-red-400';
+      return `
       <div class="flex items-center justify-between text-xs mt-1.5">
         <span class="text-slate-500">${si.label}</span>
-        <span class="text-slate-300">${si.count}/${total} <span class="text-slate-500">(${((si.count/total)*100).toFixed(0)}%)</span></span>
+        <div class="flex items-center gap-2">
+          <span class="text-slate-300">${si.count}/${total} <span class="text-slate-500">(${siPct}%)</span></span>
+          <span class="${siDeltaColor} font-medium">${siDeltaSign}${si.delta} <span class="text-[10px]">(${siPctDelta > 0 ? '+' : ''}${siPctDelta}%)</span></span>
+        </div>
       </div>
-    `).join('');
+    `}).join('');
     const deltaSign = delta >= 0 ? '+' : '';
     const deltaColor = delta >= 0 ? 'text-emerald-400' : 'text-red-400';
     return `
       <div class="bg-surface rounded-lg border border-border p-4">
         <div class="flex items-center justify-between mb-2">
           <span class="text-sm font-medium text-white">${label}</span>
-          <span class="${deltaColor} text-xs font-medium">${deltaSign}${delta} vs 7d</span>
+          <span class="${deltaColor} text-xs font-medium">${deltaSign}${delta} apps (${pctDelta > 0 ? '+' : ''}${pctDelta}%) vs 7d</span>
         </div>
         <div class="flex items-end gap-2 mb-2">
           <span class="text-2xl font-bold text-white">${green}</span>
@@ -902,22 +1157,22 @@ function renderFoundryTab() {
 
   document.getElementById('coverageGrid').innerHTML = [
     coverageCard('CI Tests', ciGreen, active.length, ciPct, deltas.ci, [
-      { label: 'PSP Tests', count: pspPass },
-      { label: 'Platform Tests', count: platPass },
-      { label: 'E2E Tests', count: e2ePass },
+      { label: 'PSP Tests', count: pspPass, delta: +1 },
+      { label: 'Platform Tests', count: platPass, delta: +1 },
+      { label: 'E2E Tests', count: e2ePass, delta: +2 },
     ]),
     coverageCard('Operational Seeding', seedGreen, active.length, seedPct, deltas.seed, [
-      { label: 'Documentation', count: docPresent },
-      { label: 'Prompt Pass Rate (\u226585%)', count: passRateGood },
-      { label: 'Synthetic Pipelines', count: synthGood },
+      { label: 'Documentation', count: docPresent, delta: +2 },
+      { label: 'Prompt Pass Rate (\u226585%)', count: passRateGood, delta: +1 },
+      { label: 'Synthetic Pipelines', count: synthGood, delta: 0 },
     ]),
     coverageCard('Workflow Coverage', wfGreen, active.length, wfPct, deltas.wf, [
-      { label: 'All workflows passing', count: wfGreen },
+      { label: 'All workflows passing', count: wfGreen, delta: +3 },
     ]),
     coverageCard('Performance', perfGreen, active.length, perfPct, deltas.perf, [
-      { label: 'Populate Hook (\u22642s)', count: popGood },
-      { label: 'Snapshot Dur. (\u22641.5s)', count: snapDurGood },
-      { label: 'Snapshot Size (\u2264100MB)', count: snapSizeGood },
+      { label: 'Populate Hook (\u22642s)', count: popGood, delta: +1 },
+      { label: 'Snapshot Dur. (\u22641.5s)', count: snapDurGood, delta: +1 },
+      { label: 'Snapshot Size (\u2264100MB)', count: snapSizeGood, delta: 0 },
     ]),
   ].join('');
 
